@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Sample Chrome and Brave Plugin",
+  "name": "Content Rating Plugin",
   "version": "1.0",
-  "description": "A simple browser extension for Chrome and Brave.",
+  "description": "Categorize and block content based on political nature.",
   "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": ["<all_urls>"],
   "background": {
