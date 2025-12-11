@@ -87,10 +87,20 @@ function copyStaticFiles(version) {
     }
   });
 
-  // Copy data files
+  // Copy data files from data/ directory
   const dataFiles = ['keywords.json', 'sources.json'];
   dataFiles.forEach(file => {
     const src = join(dataDir, file);
+    const dest = join(distDir, 'data', file);
+    if (existsSync(src)) {
+      copyFileSync(src, dest);
+    }
+  });
+
+  // Copy data files from src/data/ directory
+  const srcDataFiles = ['known-actors.json'];
+  srcDataFiles.forEach(file => {
+    const src = join(srcDir, 'data', file);
     const dest = join(distDir, 'data', file);
     if (existsSync(src)) {
       copyFileSync(src, dest);

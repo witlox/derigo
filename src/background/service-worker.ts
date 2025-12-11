@@ -10,7 +10,9 @@ import {
   clearExpiredCache,
   clearExpiredAuthorCache,
   seedKnownActors,
-  isKnownActorsSeeded
+  isKnownActorsSeeded,
+  setKnownActorPatterns,
+  KnownActorPatterns
 } from '../lib/storage.js';
 import type { KeywordEntry, SourceEntry, ClassificationResult, KnownActorEntry } from '../types/index.js';
 
@@ -78,6 +80,24 @@ async function loadAndSeedKnownActors(): Promise<void> {
       console.log('[Derigo] Known actors seeded:', actors.length, 'actors');
     } else {
       console.log('[Derigo] No known actors to seed');
+    }
+
+    // Load patterns into memory cache
+    if (data.patterns) {
+      const patterns: KnownActorPatterns = {
+        botNamePatterns: data.patterns.botNamePatterns || [],
+        trollPatterns: data.patterns.trollPatterns || [],
+        suspiciousDomains: data.patterns.suspiciousDomains || [],
+        coordinatedNarratives: data.patterns.coordinatedNarratives || [],
+        stateMediaDomains: data.patterns.stateMediaDomains || {},
+        proxyDomains: data.patterns.proxyDomains || []
+      };
+      setKnownActorPatterns(patterns);
+      console.log('[Derigo] Patterns loaded:', {
+        suspiciousDomains: patterns.suspiciousDomains.length,
+        coordinatedNarratives: patterns.coordinatedNarratives.length,
+        stateMediaCountries: Object.keys(patterns.stateMediaDomains).length
+      });
     }
   } catch (error) {
     console.error('[Derigo] Failed to seed known actors:', error);

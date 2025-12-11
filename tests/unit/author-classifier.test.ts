@@ -14,7 +14,8 @@ import type { ExtractedAuthor, AuthorClassification, ContentSignals } from '../.
 
 // Mock the storage module to avoid IndexedDB issues in tests
 jest.mock('../../src/lib/storage', () => ({
-  getKnownActor: jest.fn().mockResolvedValue(null)
+  getKnownActor: jest.fn().mockResolvedValue(null),
+  getCoordinatedNarratives: jest.fn().mockReturnValue([])
 }));
 
 describe('Author Classifier', () => {

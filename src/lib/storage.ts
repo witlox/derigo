@@ -834,3 +834,81 @@ export async function isKnownActorsSeeded(): Promise<boolean> {
     request.onerror = () => resolve(false);
   });
 }
+
+// ============================================
+// Known Actor Patterns Cache
+// ============================================
+
+export interface KnownActorPatterns {
+  botNamePatterns: string[];
+  trollPatterns: string[];
+  suspiciousDomains: string[];
+  coordinatedNarratives: string[];
+  stateMediaDomains: Record<string, string[]>;
+  proxyDomains: string[];
+}
+
+let patternsCache: KnownActorPatterns | null = null;
+
+/**
+ * Set known actor patterns (called during initialization)
+ */
+export function setKnownActorPatterns(patterns: KnownActorPatterns): void {
+  patternsCache = patterns;
+}
+
+/**
+ * Get coordinated narratives list
+ */
+export function getCoordinatedNarratives(): string[] {
+  return patternsCache?.coordinatedNarratives || [];
+}
+
+/**
+ * Get suspicious domains list
+ */
+export function getSuspiciousDomains(): string[] {
+  return patternsCache?.suspiciousDomains || [];
+}
+
+/**
+ * Get state media domains by country
+ */
+export function getStateMediaDomains(): Record<string, string[]> {
+  return patternsCache?.stateMediaDomains || {};
+}
+
+/**
+ * Get bot name patterns (regex strings)
+ */
+export function getBotNamePatterns(): string[] {
+  return patternsCache?.botNamePatterns || [];
+}
+
+/**
+ * Check if a domain is suspicious
+ */
+export function isSuspiciousDomain(domain: string): boolean {
+  const suspicious = patternsCache?.suspiciousDomains || [];
+  const proxies = patternsCache?.proxyDomains || [];
+  const lowerDomain = domain.toLowerCase();
+
+  return suspicious.some(d => lowerDomain.includes(d)) ||
+         proxies.some(d => lowerDomain.includes(d));
+}
+
+/**
+ * Check if a domain is state media
+ */
+export function isStateMediaDomain(domain: string): { isStateMedia: boolean; country?: string } {
+  const stateMedia = patternsCache?.stateMediaDomains || {};
+  const lowerDomain = domain.toLowerCase();
+
+  for (const [country, domains] of Object.entries(stateMedia)) {
+    if (domains.some(d => lowerDomain.includes(d))) {
+      return { isStateMedia: true, country };
+    }
+  }
+
+  return { isStateMedia: false };
+}

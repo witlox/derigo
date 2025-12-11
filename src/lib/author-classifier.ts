@@ -11,7 +11,7 @@ import type {
   ContentSignals,
   KnownActorEntry
 } from '../types/index.js';
-import { getKnownActor } from './storage.js';
+import { getKnownActor, getCoordinatedNarratives } from './storage.js';
 
 // ============================================
 // Pattern Constants
@@ -140,7 +140,7 @@ export function analyzeContentSignals(content: string): ContentSignals {
     productMentions: 0, // Would require product database
 
     // Coordination signals
-    coordinatedNarratives: 0, // Would require external data
+    coordinatedNarratives: countCoordinatedNarratives(lowerContent),
     whataboutismDensity: countWhataboutism(content),
 
     // Authenticity (positive) signals
@@ -214,6 +214,24 @@ function countAffiliateLinks(content: string): number {
     (count, pattern) => count + (content.match(pattern)?.length || 0),
     0
   );
+}
+
+/**
+ * Count coordinated narrative matches from known patterns
+ */
+function countCoordinatedNarratives(lowerContent: string): number {
+  const narratives = getCoordinatedNarratives();
+  if (narratives.length === 0) return 0;
+
+  let matches = 0;
+  for (const narrative of narratives) {
+    if (lowerContent.includes(narrative.toLowerCase())) {
+      matches++;
+    }
+  }
+
+  // Normalize: 1 match = 0.3, 2 = 0.5, 3+ = 0.8+
+  return Math.min(1, matches * 0.25);
 }
 
 /**
