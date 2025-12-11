@@ -23,7 +23,8 @@ export default {
     '!src/background/**/*.ts',
     '!src/popup/**/*.ts',
     '!src/options/**/*.ts',
-    '!src/content/display.ts'
+    '!src/content/display.ts',
+    '!src/lib/api.ts'  // External API integrations require mocking external services
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html', 'json-summary'],
