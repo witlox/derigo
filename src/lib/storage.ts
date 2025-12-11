@@ -160,7 +160,8 @@ async function getDB(): Promise<IDBDatabase> {
 export async function getPreferences(): Promise<UserPreferences> {
   return new Promise((resolve) => {
     chrome.storage.sync.get('preferences', (result) => {
-      resolve({ ...DEFAULT_PREFERENCES, ...result.preferences });
+      const stored = result.preferences as Partial<UserPreferences> | undefined;
+      resolve({ ...DEFAULT_PREFERENCES, ...stored });
     });
   });
 }
@@ -183,7 +184,8 @@ export async function setPreferences(prefs: Partial<UserPreferences>): Promise<v
 export async function getExternalAPISettings(): Promise<ExternalAPISettings> {
   return new Promise((resolve) => {
     chrome.storage.sync.get('externalAPIs', (result) => {
-      resolve({ ...DEFAULT_EXTERNAL_API_SETTINGS, ...result.externalAPIs });
+      const stored = result.externalAPIs as Partial<ExternalAPISettings> | undefined;
+      resolve({ ...DEFAULT_EXTERNAL_API_SETTINGS, ...stored });
     });
   });
 }
