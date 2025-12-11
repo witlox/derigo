@@ -1,5 +1,10 @@
 # Derigo
 
+[![CI](https://github.com/witlox/derigo/actions/workflows/ci.yml/badge.svg)](https://github.com/witlox/derigo/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/witlox/derigo/actions/workflows/codeql.yml/badge.svg)](https://github.com/witlox/derigo/actions/workflows/codeql.yml)
+[![codecov](https://codecov.io/gh/witlox/derigo/branch/main/graph/badge.svg)](https://codecov.io/gh/witlox/derigo)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A browser extension that analyzes web content for political alignment, truthfulness, and author authenticity, giving you control over what you consume.
 
 ## What is Derigo?
@@ -306,6 +311,9 @@ derigo/
 
 ### Contributing
 
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+
+Quick start:
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
@@ -317,9 +325,10 @@ derigo/
 - [x] Core content classification engine
 - [x] Chrome/Brave support
 - [x] 4-axis radar chart visualization
-- [ ] Author classification (bot/troll/state-sponsored detection)
-- [ ] 7-axis radar chart with author axes
-- [ ] Known actor database
+- [x] Author classification (bot/troll/state-sponsored detection)
+- [x] 7-axis radar chart with author axes
+- [x] Known actor database
+- [x] Site profiles for per-domain customization
 - [ ] Firefox support
 - [ ] Safari/iOS support
 - [ ] Fact-check API integration
