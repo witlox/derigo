@@ -164,7 +164,7 @@ function analyzeContentSignals(text: string): {
   const hasNumbers = /\d+%|\d+\.\d+|\$\d+|\d{4}/.test(text);
 
   // Direct quotes
-  const hasQuotes = /"[^"]{20,}"/.test(text) || /\"[^\"]{20,}\"/.test(text);
+  const hasQuotes = /"[^"]{20,}"/.test(text);
 
   return {
     hasExcessiveCaps,
