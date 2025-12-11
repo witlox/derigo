@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Derigo</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <!-- Header -->
+    <header class="popup-header">
+      <h1 class="popup-title">Derigo</h1>
+      <div class="popup-status" id="status">
+        <span class="status-dot"></span>
+        <span class="status-text">Active</span>
+      </div>
+    </header>
+
+    <!-- Loading State -->
+    <div class="loading" id="loading">
+      <div class="loading-spinner"></div>
+      <span>Analyzing page...</span>
+    </div>
+
+    <!-- No Analysis State -->
+    <div class="no-analysis" id="no-analysis" style="display: none;">
+      <p>No analysis available for this page.</p>
+      <p class="hint">This may be an internal browser page or the content couldn't be analyzed.</p>
+    </div>
+
+    <!-- Analysis Results -->
+    <section class="analysis" id="analysis" style="display: none;">
+      <!-- Radar Chart -->
+      <div class="radar-container">
+        <svg id="radar-chart" viewBox="0 0 200 200" class="radar-chart">
+          <!-- Grid circles -->
+          <circle cx="100" cy="100" r="80" class="radar-grid"/>
+          <circle cx="100" cy="100" r="60" class="radar-grid"/>
+          <circle cx="100" cy="100" r="40" class="radar-grid"/>
+          <circle cx="100" cy="100" r="20" class="radar-grid"/>
+
+          <!-- Axis lines -->
+          <line x1="100" y1="20" x2="100" y2="180" class="radar-axis"/>
+          <line x1="20" y1="100" x2="180" y2="100" class="radar-axis"/>
+
+          <!-- Data polygon (will be updated via JS) -->
+          <polygon id="radar-polygon" class="radar-data" points="100,100 100,100 100,100 100,100"/>
+
+          <!-- Axis labels -->
+          <text x="100" y="12" class="radar-label" text-anchor="middle">Authoritarian</text>
+          <text x="188" y="104" class="radar-label" text-anchor="end">Right</text>
+          <text x="100" y="196" class="radar-label" text-anchor="middle">Libertarian</text>
+          <text x="12" y="104" class="radar-label" text-anchor="start">Left</text>
+        </svg>
+      </div>
+
+      <!-- Axis Details -->
+      <div class="axes-list">
+        <div class="axis-item">
+          <span class="axis-label">Economic</span>
+          <div class="axis-bar">
+            <div class="axis-fill" id="economic-bar"></div>
+            <div class="axis-marker" id="economic-marker"></div>
+          </div>
+          <span class="axis-value" id="economic-value">--</span>
+        </div>
+
+        <div class="axis-item">
+          <span class="axis-label">Social</span>
+          <div class="axis-bar">
+            <div class="axis-fill" id="social-bar"></div>
+            <div class="axis-marker" id="social-marker"></div>
+          </div>
+          <span class="axis-value" id="social-value">--</span>
+        </div>
+
+        <div class="axis-item">
+          <span class="axis-label">Authority</span>
+          <div class="axis-bar">
+            <div class="axis-fill" id="authority-bar"></div>
+            <div class="axis-marker" id="authority-marker"></div>
+          </div>
+          <span class="axis-value" id="authority-value">--</span>
+        </div>
+
+        <div class="axis-item">
+          <span class="axis-label">Globalism</span>
+          <div class="axis-bar">
+            <div class="axis-fill" id="globalism-bar"></div>
+            <div class="axis-marker" id="globalism-marker"></div>
+          </div>
+          <span class="axis-value" id="globalism-value">--</span>
+        </div>
+      </div>
+
+      <!-- Truth Score -->
+      <div class="truth-section">
+        <div class="truth-header">
+          <span class="truth-label">Truthfulness</span>
+          <span class="truth-score" id="truth-score">--</span>
+        </div>
+        <div class="truth-bar">
+          <div class="truth-fill" id="truth-fill"></div>
+        </div>
+        <span class="truth-indicator" id="truth-indicator"></span>
+      </div>
+
+      <!-- Confidence -->
+      <div class="confidence">
+        <span>Analysis confidence:</span>
+        <span id="confidence-value">--</span>
+      </div>
+    </section>
+
+    <!-- Quick Settings -->
+    <section class="quick-settings">
+      <div class="setting-row">
+        <label class="toggle-label">
+          <span>Extension enabled</span>
+          <input type="checkbox" id="toggle-enabled" checked>
+          <span class="toggle-switch"></span>
+        </label>
+      </div>
+
+      <div class="setting-row">
+        <label class="select-label">
+          <span>Display mode</span>
+          <select id="display-mode">
+            <option value="badge">Badge</option>
+            <option value="overlay">Overlay</option>
+            <option value="block">Block</option>
+            <option value="off">Off</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="popup-footer">
+      <a href="#" id="open-options">Full Settings</a>
+      <span class="version">v1.0.0</span>
+    </footer>
+  </div>
+
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

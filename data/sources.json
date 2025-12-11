@@ -1,0 +1,305 @@
+{
+  "sources": [
+    {
+      "domain": "nytimes.com",
+      "name": "New York Times",
+      "factualRating": 82,
+      "biasRating": {"economic": -25, "social": -30, "authority": 5, "globalism": 35},
+      "category": "news"
+    },
+    {
+      "domain": "washingtonpost.com",
+      "name": "Washington Post",
+      "factualRating": 80,
+      "biasRating": {"economic": -20, "social": -25, "authority": 5, "globalism": 30},
+      "category": "news"
+    },
+    {
+      "domain": "wsj.com",
+      "name": "Wall Street Journal",
+      "factualRating": 85,
+      "biasRating": {"economic": 35, "social": 10, "authority": 10, "globalism": 25},
+      "category": "news"
+    },
+    {
+      "domain": "foxnews.com",
+      "name": "Fox News",
+      "factualRating": 58,
+      "biasRating": {"economic": 40, "social": 45, "authority": 25, "globalism": -30},
+      "category": "news"
+    },
+    {
+      "domain": "cnn.com",
+      "name": "CNN",
+      "factualRating": 70,
+      "biasRating": {"economic": -20, "social": -25, "authority": 10, "globalism": 25},
+      "category": "news"
+    },
+    {
+      "domain": "msnbc.com",
+      "name": "MSNBC",
+      "factualRating": 68,
+      "biasRating": {"economic": -35, "social": -40, "authority": 10, "globalism": 30},
+      "category": "news"
+    },
+    {
+      "domain": "bbc.com",
+      "name": "BBC",
+      "factualRating": 88,
+      "biasRating": {"economic": -10, "social": -15, "authority": 5, "globalism": 30},
+      "category": "news"
+    },
+    {
+      "domain": "bbc.co.uk",
+      "name": "BBC",
+      "factualRating": 88,
+      "biasRating": {"economic": -10, "social": -15, "authority": 5, "globalism": 30},
+      "category": "news"
+    },
+    {
+      "domain": "reuters.com",
+      "name": "Reuters",
+      "factualRating": 92,
+      "biasRating": {"economic": 0, "social": 0, "authority": 0, "globalism": 15},
+      "category": "news"
+    },
+    {
+      "domain": "apnews.com",
+      "name": "Associated Press",
+      "factualRating": 92,
+      "biasRating": {"economic": 0, "social": -5, "authority": 0, "globalism": 10},
+      "category": "news"
+    },
+    {
+      "domain": "npr.org",
+      "name": "NPR",
+      "factualRating": 85,
+      "biasRating": {"economic": -20, "social": -25, "authority": 0, "globalism": 25},
+      "category": "news"
+    },
+    {
+      "domain": "theguardian.com",
+      "name": "The Guardian",
+      "factualRating": 80,
+      "biasRating": {"economic": -35, "social": -40, "authority": -10, "globalism": 35},
+      "category": "news"
+    },
+    {
+      "domain": "economist.com",
+      "name": "The Economist",
+      "factualRating": 88,
+      "biasRating": {"economic": 20, "social": -10, "authority": 0, "globalism": 45},
+      "category": "news"
+    },
+    {
+      "domain": "politico.com",
+      "name": "Politico",
+      "factualRating": 82,
+      "biasRating": {"economic": -10, "social": -10, "authority": 5, "globalism": 20},
+      "category": "news"
+    },
+    {
+      "domain": "thehill.com",
+      "name": "The Hill",
+      "factualRating": 78,
+      "biasRating": {"economic": 0, "social": 0, "authority": 5, "globalism": 10},
+      "category": "news"
+    },
+    {
+      "domain": "breitbart.com",
+      "name": "Breitbart",
+      "factualRating": 42,
+      "biasRating": {"economic": 50, "social": 60, "authority": 35, "globalism": -55},
+      "category": "news"
+    },
+    {
+      "domain": "dailywire.com",
+      "name": "Daily Wire",
+      "factualRating": 55,
+      "biasRating": {"economic": 45, "social": 55, "authority": 25, "globalism": -35},
+      "category": "news"
+    },
+    {
+      "domain": "huffpost.com",
+      "name": "HuffPost",
+      "factualRating": 65,
+      "biasRating": {"economic": -40, "social": -45, "authority": -5, "globalism": 35},
+      "category": "news"
+    },
+    {
+      "domain": "vox.com",
+      "name": "Vox",
+      "factualRating": 72,
+      "biasRating": {"economic": -35, "social": -40, "authority": 5, "globalism": 35},
+      "category": "news"
+    },
+    {
+      "domain": "slate.com",
+      "name": "Slate",
+      "factualRating": 70,
+      "biasRating": {"economic": -30, "social": -35, "authority": 0, "globalism": 30},
+      "category": "news"
+    },
+    {
+      "domain": "theatlantic.com",
+      "name": "The Atlantic",
+      "factualRating": 82,
+      "biasRating": {"economic": -20, "social": -25, "authority": 5, "globalism": 35},
+      "category": "news"
+    },
+    {
+      "domain": "nationalreview.com",
+      "name": "National Review",
+      "factualRating": 72,
+      "biasRating": {"economic": 45, "social": 40, "authority": 15, "globalism": -15},
+      "category": "news"
+    },
+    {
+      "domain": "reason.com",
+      "name": "Reason",
+      "factualRating": 75,
+      "biasRating": {"economic": 45, "social": -20, "authority": -50, "globalism": 20},
+      "category": "news"
+    },
+    {
+      "domain": "jacobin.com",
+      "name": "Jacobin",
+      "factualRating": 68,
+      "biasRating": {"economic": -70, "social": -50, "authority": -15, "globalism": 20},
+      "category": "news"
+    },
+    {
+      "domain": "thenation.com",
+      "name": "The Nation",
+      "factualRating": 70,
+      "biasRating": {"economic": -55, "social": -50, "authority": -10, "globalism": 25},
+      "category": "news"
+    },
+    {
+      "domain": "motherjones.com",
+      "name": "Mother Jones",
+      "factualRating": 72,
+      "biasRating": {"economic": -50, "social": -45, "authority": -10, "globalism": 30},
+      "category": "news"
+    },
+    {
+      "domain": "theintercept.com",
+      "name": "The Intercept",
+      "factualRating": 75,
+      "biasRating": {"economic": -45, "social": -40, "authority": -25, "globalism": 15},
+      "category": "news"
+    },
+    {
+      "domain": "newsmax.com",
+      "name": "Newsmax",
+      "factualRating": 48,
+      "biasRating": {"economic": 50, "social": 55, "authority": 30, "globalism": -45},
+      "category": "news"
+    },
+    {
+      "domain": "oann.com",
+      "name": "OAN",
+      "factualRating": 35,
+      "biasRating": {"economic": 55, "social": 60, "authority": 40, "globalism": -55},
+      "category": "news"
+    },
+    {
+      "domain": "democracynow.org",
+      "name": "Democracy Now",
+      "factualRating": 72,
+      "biasRating": {"economic": -60, "social": -50, "authority": -20, "globalism": 25},
+      "category": "news"
+    },
+    {
+      "domain": "infowars.com",
+      "name": "InfoWars",
+      "factualRating": 15,
+      "biasRating": {"economic": 40, "social": 50, "authority": -30, "globalism": -70},
+      "category": "conspiracy"
+    },
+    {
+      "domain": "naturalnews.com",
+      "name": "Natural News",
+      "factualRating": 12,
+      "biasRating": {"economic": 30, "social": 40, "authority": -40, "globalism": -50},
+      "category": "conspiracy"
+    },
+    {
+      "domain": "snopes.com",
+      "name": "Snopes",
+      "factualRating": 90,
+      "biasRating": {"economic": -10, "social": -10, "authority": 0, "globalism": 10},
+      "category": "fact-check"
+    },
+    {
+      "domain": "politifact.com",
+      "name": "PolitiFact",
+      "factualRating": 88,
+      "biasRating": {"economic": -5, "social": -5, "authority": 0, "globalism": 10},
+      "category": "fact-check"
+    },
+    {
+      "domain": "factcheck.org",
+      "name": "FactCheck.org",
+      "factualRating": 90,
+      "biasRating": {"economic": 0, "social": 0, "authority": 0, "globalism": 5},
+      "category": "fact-check"
+    },
+    {
+      "domain": "theonion.com",
+      "name": "The Onion",
+      "factualRating": 10,
+      "biasRating": {"economic": -20, "social": -20, "authority": -10, "globalism": 10},
+      "category": "satire"
+    },
+    {
+      "domain": "babylonbee.com",
+      "name": "Babylon Bee",
+      "factualRating": 10,
+      "biasRating": {"economic": 30, "social": 40, "authority": 10, "globalism": -20},
+      "category": "satire"
+    },
+    {
+      "domain": "reddit.com",
+      "name": "Reddit",
+      "factualRating": 50,
+      "biasRating": {"economic": -15, "social": -20, "authority": -15, "globalism": 15},
+      "category": "social"
+    },
+    {
+      "domain": "twitter.com",
+      "name": "Twitter/X",
+      "factualRating": 45,
+      "biasRating": {"economic": 0, "social": 0, "authority": 0, "globalism": 0},
+      "category": "social"
+    },
+    {
+      "domain": "x.com",
+      "name": "Twitter/X",
+      "factualRating": 45,
+      "biasRating": {"economic": 0, "social": 0, "authority": 0, "globalism": 0},
+      "category": "social"
+    },
+    {
+      "domain": "facebook.com",
+      "name": "Facebook",
+      "factualRating": 45,
+      "biasRating": {"economic": 0, "social": 0, "authority": 0, "globalism": 0},
+      "category": "social"
+    },
+    {
+      "domain": "wikipedia.org",
+      "name": "Wikipedia",
+      "factualRating": 80,
+      "biasRating": {"economic": -5, "social": -10, "authority": 0, "globalism": 15},
+      "category": "reference"
+    },
+    {
+      "domain": "britannica.com",
+      "name": "Britannica",
+      "factualRating": 95,
+      "biasRating": {"economic": 0, "social": 0, "authority": 0, "globalism": 10},
+      "category": "reference"
+    }
+  ]
+}

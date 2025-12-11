@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Derigo Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="options-container">
+    <header class="options-header">
+      <h1>Derigo Settings</h1>
+      <p>Configure content filtering and analysis preferences</p>
+    </header>
+
+    <main class="options-main">
+      <!-- General Settings -->
+      <section class="settings-section">
+        <h2>General</h2>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="enabled">Extension Enabled</label>
+            <p>Enable or disable content analysis</p>
+          </div>
+          <div class="setting-control">
+            <input type="checkbox" id="enabled" class="toggle">
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="display-mode">Display Mode</label>
+            <p>How to display analysis results and warnings</p>
+          </div>
+          <div class="setting-control">
+            <select id="display-mode">
+              <option value="badge">Badge - Non-intrusive indicator</option>
+              <option value="overlay">Overlay - Dismissible warning</option>
+              <option value="block">Block - Full page block</option>
+              <option value="off">Off - No visual display</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <!-- Political Filters -->
+      <section class="settings-section">
+        <h2>Political Filters</h2>
+        <p class="section-desc">Set acceptable ranges for each political axis. Content outside these ranges will trigger the display mode action.</p>
+
+        <div class="filter-item">
+          <div class="filter-header">
+            <label>
+              <input type="checkbox" id="economic-enabled">
+              Economic Axis
+            </label>
+            <span class="filter-range" id="economic-range-display">All allowed</span>
+          </div>
+          <div class="filter-slider" id="economic-slider-container">
+            <span class="slider-label-left">Left</span>
+            <div class="dual-slider">
+              <input type="range" id="economic-min" min="-100" max="100" value="-100">
+              <input type="range" id="economic-max" min="-100" max="100" value="100">
+            </div>
+            <span class="slider-label-right">Right</span>
+          </div>
+        </div>
+
+        <div class="filter-item">
+          <div class="filter-header">
+            <label>
+              <input type="checkbox" id="social-enabled">
+              Social Axis
+            </label>
+            <span class="filter-range" id="social-range-display">All allowed</span>
+          </div>
+          <div class="filter-slider" id="social-slider-container">
+            <span class="slider-label-left">Progressive</span>
+            <div class="dual-slider">
+              <input type="range" id="social-min" min="-100" max="100" value="-100">
+              <input type="range" id="social-max" min="-100" max="100" value="100">
+            </div>
+            <span class="slider-label-right">Conservative</span>
+          </div>
+        </div>
+
+        <div class="filter-item">
+          <div class="filter-header">
+            <label>
+              <input type="checkbox" id="authority-enabled">
+              Authority Axis
+            </label>
+            <span class="filter-range" id="authority-range-display">All allowed</span>
+          </div>
+          <div class="filter-slider" id="authority-slider-container">
+            <span class="slider-label-left">Libertarian</span>
+            <div class="dual-slider">
+              <input type="range" id="authority-min" min="-100" max="100" value="-100">
+              <input type="range" id="authority-max" min="-100" max="100" value="100">
+            </div>
+            <span class="slider-label-right">Authoritarian</span>
+          </div>
+        </div>
+
+        <div class="filter-item">
+          <div class="filter-header">
+            <label>
+              <input type="checkbox" id="globalism-enabled">
+              Globalism Axis
+            </label>
+            <span class="filter-range" id="globalism-range-display">All allowed</span>
+          </div>
+          <div class="filter-slider" id="globalism-slider-container">
+            <span class="slider-label-left">Nationalist</span>
+            <div class="dual-slider">
+              <input type="range" id="globalism-min" min="-100" max="100" value="-100">
+              <input type="range" id="globalism-max" min="-100" max="100" value="100">
+            </div>
+            <span class="slider-label-right">Globalist</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Truthfulness Filter -->
+      <section class="settings-section">
+        <h2>Truthfulness Filter</h2>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="truth-threshold">Minimum Truthfulness Score</label>
+            <p>Content below this score will trigger the display mode action</p>
+          </div>
+          <div class="setting-control slider-control">
+            <input type="range" id="truth-threshold" min="0" max="100" value="0">
+            <span id="truth-threshold-value">0%</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- External APIs -->
+      <section class="settings-section">
+        <h2>External APIs</h2>
+        <div class="warning-box">
+          <strong>Privacy Notice:</strong> All external API integrations are disabled by default. Enabling them will send some page content to third-party services. You must provide your own API keys.
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="allow-external">Allow External API Calls</label>
+            <p>Master switch for all external API integrations</p>
+          </div>
+          <div class="setting-control">
+            <input type="checkbox" id="allow-external" class="toggle">
+          </div>
+        </div>
+
+        <div class="api-section" id="api-settings" style="display: none;">
+          <!-- AI Classification -->
+          <div class="api-item">
+            <h3>AI Classification</h3>
+            <p>Use AI models for enhanced content analysis</p>
+
+            <div class="api-setting">
+              <label>
+                <input type="checkbox" id="ai-enabled">
+                Enable AI Classification
+              </label>
+            </div>
+
+            <div class="api-setting">
+              <label for="ai-provider">Provider</label>
+              <select id="ai-provider">
+                <option value="openai">OpenAI (ChatGPT)</option>
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="google">Google (Gemini)</option>
+              </select>
+            </div>
+
+            <div class="api-setting">
+              <label for="ai-key">API Key</label>
+              <input type="password" id="ai-key" placeholder="Enter your API key">
+            </div>
+
+            <div class="api-setting">
+              <label for="ai-confidence">Auto-analyze threshold</label>
+              <input type="range" id="ai-confidence" min="0" max="100" value="70">
+              <span id="ai-confidence-value">70%</span>
+            </div>
+          </div>
+
+          <!-- Fact Check -->
+          <div class="api-item">
+            <h3>Fact Check API</h3>
+            <p>Query Google Fact Check Tools for claim verification</p>
+
+            <div class="api-setting">
+              <label>
+                <input type="checkbox" id="factcheck-enabled">
+                Enable Fact Check
+              </label>
+            </div>
+
+            <div class="api-setting">
+              <label for="factcheck-key">API Key</label>
+              <input type="password" id="factcheck-key" placeholder="Enter your API key">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Whitelist -->
+      <section class="settings-section">
+        <h2>Whitelisted Domains</h2>
+        <p class="section-desc">These domains will not be analyzed or filtered.</p>
+
+        <div id="whitelist-container">
+          <div id="whitelist-items"></div>
+          <div class="whitelist-add">
+            <input type="text" id="whitelist-input" placeholder="example.com">
+            <button id="whitelist-add-btn">Add</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Data Management -->
+      <section class="settings-section">
+        <h2>Data Management</h2>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label>Clear Classification Cache</label>
+            <p>Remove all cached classification results</p>
+          </div>
+          <div class="setting-control">
+            <button id="clear-cache" class="btn btn-secondary">Clear Cache</button>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label>Reset All Settings</label>
+            <p>Restore all settings to defaults</p>
+          </div>
+          <div class="setting-control">
+            <button id="reset-settings" class="btn btn-danger">Reset</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="options-footer">
+      <p>Derigo v1.0.0</p>
+    </footer>
+  </div>
+
+  <script src="options.js" type="module"></script>
+</body>
+</html>
