@@ -11,7 +11,7 @@ import type {
   DisplayMode
 } from '../types/index.js';
 import { getKeywords, getSourceReputation, getCachedAuthor, cacheAuthor, getProfileForDomain } from './storage.js';
-import { classifyAuthor, getDefaultAuthorClassification } from './author-classifier.js';
+import { classifyAuthor } from './author-classifier.js';
 
 // In-memory cache for keywords (loaded once)
 let keywordsCache: KeywordEntry[] | null = null;

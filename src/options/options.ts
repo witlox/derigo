@@ -749,7 +749,7 @@ function addDomainToModal(): void {
   if (!domain) return;
 
   // Basic domain validation
-  if (!/^[a-z0-9]+([\-.][a-z0-9]+)*\.[a-z]{2,}$/i.test(domain) && !/^localhost(:\d+)?$/.test(domain)) {
+  if (!/^[a-z0-9]+([-.][a-z0-9]+)*\.[a-z]{2,}$/i.test(domain) && !/^localhost(:\d+)?$/.test(domain)) {
     alert('Please enter a valid domain (e.g., example.com)');
     return;
   }

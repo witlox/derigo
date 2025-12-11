@@ -71,6 +71,9 @@ const authorElements = {
  * Initialize popup
  */
 async function init(): Promise<void> {
+  // Show loading state initially
+  showLoading();
+
   // Load preferences
   const prefs = await getPreferences();
   updateSettingsUI(prefs);

@@ -7,7 +7,7 @@
  * - Domain as fallback
  */
 
-import type { ExtractedAuthor, AuthorPlatform } from '../types/index.js';
+import type { ExtractedAuthor } from '../types/index.js';
 
 /**
  * Main function to extract author from a document

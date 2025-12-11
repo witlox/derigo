@@ -5,10 +5,8 @@
 
 import type {
   AIClassificationResponse,
-  ExternalAPISettings,
   AIProvider,
   ExtractedAuthor,
-  AuthorClassification,
   AuthorIntent
 } from '../types/index.js';
 import { getExternalAPISettings, canMakeExternalCall } from './storage.js';

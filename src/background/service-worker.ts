@@ -112,7 +112,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ success: true });
       break;
 
-    case 'GET_TAB_CLASSIFICATION':
+    case 'GET_TAB_CLASSIFICATION': {
       // Get classification for a specific tab
       const tabId = message.tabId || sender.tab?.id;
       if (tabId) {
@@ -121,6 +121,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ classification: null });
       }
       break;
+    }
 
     case 'CLEAR_TAB_CLASSIFICATION':
       // Clear classification when navigating away

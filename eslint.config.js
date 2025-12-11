@@ -32,7 +32,12 @@ export default [
         indexedDB: 'readonly',
         IDBDatabase: 'readonly',
         Request: 'readonly',
-        Response: 'readonly'
+        Response: 'readonly',
+        crypto: 'readonly',
+        history: 'readonly',
+        location: 'readonly',
+        alert: 'readonly',
+        confirm: 'readonly'
       }
     },
     plugins: {

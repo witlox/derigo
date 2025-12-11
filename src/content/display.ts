@@ -15,7 +15,7 @@ import {
   getIntentIndicator,
   formatFilterReason
 } from '../lib/classifier.js';
-import { getAuthenticityLabel, getCoordinationLabel, getAuthorIntentInfo } from '../lib/author-classifier.js';
+import { getAuthenticityLabel, getCoordinationLabel } from '../lib/author-classifier.js';
 import { createSiteProfile, getProfileForDomain } from '../lib/storage.js';
 
 // Element IDs
@@ -30,7 +30,7 @@ let originalBodyContent: string | null = null;
 /**
  * Apply display based on filter action
  */
-export function applyDisplay(action: FilterAction, prefs: UserPreferences): void {
+export function applyDisplay(action: FilterAction, _prefs: UserPreferences): void {
   // Ensure styles are injected
   injectStyles();
 
