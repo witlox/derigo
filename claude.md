@@ -20,21 +20,30 @@ Users can filter or block content based on either dimension, with results displa
 
 ```
 derigo/
-├── extension/           # Browser extension source
-│   ├── manifest.json    # Extension manifest (MV3)
-│   ├── background.js    # Service worker
-│   ├── content.js       # Content script (injected)
-│   ├── popup/           # Extension popup UI
-│   ├── options/         # Settings page
-│   └── lib/             # Shared libraries
-├── shared/              # Code shared across platforms
-│   ├── classifier/      # Classification engine
-│   ├── scoring/         # Scoring algorithms
-│   └── types/           # TypeScript types
-├── data/                # Classification data
-│   ├── sources.json     # Source reputation database
-│   └── keywords.json    # Keyword weights by category
-└── scripts/             # Build and utility scripts
+├── src/                      # Source code
+│   ├── manifest.json         # Extension manifest (MV3)
+│   ├── background/           # Service worker
+│   ├── content/              # Content scripts
+│   │   ├── content.ts        # Main content script
+│   │   ├── display.ts        # UI rendering
+│   │   └── styles.css        # Injected styles
+│   ├── popup/                # Extension popup UI
+│   ├── options/              # Settings page
+│   ├── lib/                  # Shared libraries
+│   │   ├── classifier.ts     # Content classification
+│   │   ├── author-classifier.ts  # Author analysis
+│   │   ├── author-extractor.ts   # Author extraction
+│   │   └── storage.ts        # Storage wrapper
+│   ├── data/
+│   │   └── known-actors.json # Known bad actors DB
+│   └── types/                # TypeScript types
+├── data/                     # Classification data
+│   ├── sources.json          # Source reputation database
+│   └── keywords.json         # Keyword weights by category
+├── tests/                    # Test suite
+│   ├── unit/                 # Unit tests
+│   └── mocks/                # Chrome API mocks
+└── scripts/                  # Build and utility scripts
 ```
 
 ### Classification System
@@ -236,38 +245,62 @@ npm run package    # Create distributable .zip
 
 ## Current State
 
-The project has a basic skeleton with:
-- MV3 manifest structure
-- Basic keyword scoring system
-- SQLite database setup (needs migration to IndexedDB)
-- Simple popup UI
+The project is fully functional with:
+- Complete MV3 manifest structure
+- Multi-dimensional keyword scoring system (4 political axes)
+- Author classification system (authenticity, coordination, intent detection)
+- IndexedDB storage with Chrome Storage API for settings
+- Display modes (badge, overlay, block)
+- Popup and options UI
+- Site profiles for per-domain customization
+- Known actors database (bundled)
+- Comprehensive test suite
 
-### Migration Needed
+### Architecture
 
-The current implementation uses Node.js `sqlite3` which won't work in browser extensions. Migrate to:
-- IndexedDB for structured data
-- Chrome Storage API for settings
-- Remove all Node.js dependencies from extension code
+```
+src/
+├── background/          # Service worker
+├── content/             # Content scripts (content.ts, display.ts)
+├── popup/               # Toolbar popup UI
+├── options/             # Settings page
+├── lib/                 # Shared libraries
+│   ├── classifier.ts    # Content classification engine
+│   ├── author-classifier.ts   # Author analysis
+│   ├── author-extractor.ts    # Author extraction from pages
+│   ├── extractor.ts     # Content extraction
+│   └── storage.ts       # Chrome storage wrapper
+├── data/
+│   └── known-actors.json # Known bots/trolls/state actors
+└── types/               # TypeScript definitions
+```
 
 ## Roadmap
 
-### Phase 1: Core Extension
-- [ ] Migrate from SQLite to IndexedDB
-- [ ] Implement multi-dimensional scoring
-- [ ] Build source reputation database
-- [ ] Create configurable UI
-- [ ] Add display mode options
+### Phase 1: Core Extension ✅
+- [x] Migrate from SQLite to IndexedDB
+- [x] Implement multi-dimensional scoring
+- [x] Build source reputation database
+- [x] Create configurable UI
+- [x] Add display mode options
+- [x] Author classification system
+- [x] 7-axis radar chart visualization
+- [x] Known actor database
+- [x] Site profiles for per-domain customization
 
-### Phase 2: Enhanced Analysis
+### Phase 2: Enhanced Analysis (In Progress)
 - [ ] Integrate fact-check APIs
 - [ ] Add optional AI classification
-- [ ] Implement caching layer
+- [x] Implement caching layer
+- [ ] Bot Sentinel integration
 - [ ] Performance optimization
 
 ### Phase 3: Platform Expansion
 - [ ] Firefox port
 - [ ] Safari Web Extension
 - [ ] iOS companion app
+- [ ] Community source ratings
+- [ ] Browser history analysis
 
 ## Commands Reference
 

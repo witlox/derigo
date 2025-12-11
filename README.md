@@ -96,7 +96,7 @@ Content receives a 0-100 truthfulness rating based on:
 
 ### Chrome / Brave
 
-1. Download the latest release from [Releases](https://github.com/user/derigo/releases)
+1. Download the latest release from [Releases](https://github.com/witlox/derigo/releases)
 2. Unzip to a folder
 3. Go to `chrome://extensions`
 4. Enable "Developer mode"
@@ -276,7 +276,7 @@ Enable in settings to use external APIs for improved accuracy:
 ### Setup
 
 ```bash
-git clone https://github.com/user/derigo.git
+git clone https://github.com/witlox/derigo.git
 cd derigo
 npm install
 ```
