@@ -11,10 +11,12 @@ import {
   DEFAULT_PREFERENCES,
   DEFAULT_EXTERNAL_API_SETTINGS,
   clearExpiredCache,
-  addToWhitelist,
-  removeFromWhitelist
+  getAllSiteProfiles,
+  createSiteProfile,
+  updateSiteProfile,
+  deleteSiteProfile
 } from '../lib/storage.js';
-import type { UserPreferences, ExternalAPISettings, AuthorIntent } from '../types/index.js';
+import type { UserPreferences, ExternalAPISettings, AuthorIntent, SiteProfile, DisplayMode } from '../types/index.js';
 
 // DOM Elements
 const elements = {
@@ -73,15 +75,53 @@ const elements = {
   factcheckEnabled: document.getElementById('factcheck-enabled') as HTMLInputElement,
   factcheckKey: document.getElementById('factcheck-key') as HTMLInputElement,
 
-  // Whitelist
-  whitelistItems: document.getElementById('whitelist-items') as HTMLElement,
-  whitelistInput: document.getElementById('whitelist-input') as HTMLInputElement,
-  whitelistAddBtn: document.getElementById('whitelist-add-btn') as HTMLButtonElement,
-
   // Data management
   clearCache: document.getElementById('clear-cache') as HTMLButtonElement,
-  resetSettings: document.getElementById('reset-settings') as HTMLButtonElement
+  resetSettings: document.getElementById('reset-settings') as HTMLButtonElement,
+
+  // Site Profiles
+  profileList: document.getElementById('profile-list') as HTMLElement,
+  createProfileBtn: document.getElementById('create-profile-btn') as HTMLButtonElement,
+
+  // Profile Modal
+  profileModal: document.getElementById('profile-modal') as HTMLElement,
+  modalTitle: document.getElementById('modal-title') as HTMLElement,
+  modalClose: document.getElementById('modal-close') as HTMLButtonElement,
+  profileName: document.getElementById('profile-name') as HTMLInputElement,
+  profileDescription: document.getElementById('profile-description') as HTMLInputElement,
+  profileDomains: document.getElementById('profile-domains') as HTMLElement,
+  profileDomainInput: document.getElementById('profile-domain-input') as HTMLInputElement,
+  profileAddDomainBtn: document.getElementById('profile-add-domain-btn') as HTMLButtonElement,
+
+  // Profile overrides
+  overrideDisplayMode: document.getElementById('override-display-mode') as HTMLInputElement,
+  profileDisplayMode: document.getElementById('profile-display-mode') as HTMLSelectElement,
+  overrideTruthScore: document.getElementById('override-truth-score') as HTMLInputElement,
+  profileTruthScore: document.getElementById('profile-truth-score') as HTMLInputElement,
+  profileTruthScoreValue: document.getElementById('profile-truth-score-value') as HTMLElement,
+  overrideAuthenticity: document.getElementById('override-authenticity') as HTMLInputElement,
+  profileAuthenticity: document.getElementById('profile-authenticity') as HTMLInputElement,
+  profileAuthenticityValue: document.getElementById('profile-authenticity-value') as HTMLElement,
+  overrideCoordination: document.getElementById('override-coordination') as HTMLInputElement,
+  profileCoordination: document.getElementById('profile-coordination') as HTMLInputElement,
+  profileCoordinationValue: document.getElementById('profile-coordination-value') as HTMLElement,
+  overrideBlockedIntents: document.getElementById('override-blocked-intents') as HTMLInputElement,
+  profileBlockTroll: document.getElementById('profile-block-troll') as HTMLInputElement,
+  profileBlockBot: document.getElementById('profile-block-bot') as HTMLInputElement,
+  profileBlockState: document.getElementById('profile-block-state') as HTMLInputElement,
+  profileBlockCommercial: document.getElementById('profile-block-commercial') as HTMLInputElement,
+  profileBlockActivist: document.getElementById('profile-block-activist') as HTMLInputElement,
+
+  // Profile action buttons
+  profileDeleteBtn: document.getElementById('profile-delete-btn') as HTMLButtonElement,
+  profileCancelBtn: document.getElementById('profile-cancel-btn') as HTMLButtonElement,
+  profileSaveBtn: document.getElementById('profile-save-btn') as HTMLButtonElement
 };
+
+// Current profile being edited (null = creating new)
+let editingProfileId: string | null = null;
+// Temporary domains list for modal
+let modalDomains: string[] = [];
 
 /**
  * Initialize options page
@@ -93,10 +133,13 @@ async function init(): Promise<void> {
 
   updatePreferencesUI(prefs);
   updateAPISettingsUI(apiSettings);
-  renderWhitelist(prefs.whitelistedDomains);
+
+  // Load and display site profiles
+  await renderProfiles();
 
   // Set up event listeners
   setupEventListeners();
+  setupProfileEventListeners();
 }
 
 /**
@@ -181,31 +224,6 @@ function updateAPISettingsUI(settings: ExternalAPISettings): void {
 }
 
 /**
- * Render whitelist
- */
-function renderWhitelist(domains: string[]): void {
-  elements.whitelistItems.innerHTML = domains.map(domain => `
-    <div class="whitelist-item" data-domain="${domain}">
-      <span>${domain}</span>
-      <button title="Remove">&times;</button>
-    </div>
-  `).join('');
-
-  // Add remove listeners
-  elements.whitelistItems.querySelectorAll('.whitelist-item button').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      const item = (e.target as HTMLElement).closest('.whitelist-item');
-      const domain = item?.getAttribute('data-domain');
-      if (domain) {
-        await removeFromWhitelist(domain);
-        const prefs = await getPreferences();
-        renderWhitelist(prefs.whitelistedDomains);
-      }
-    });
-  });
-}
-
-/**
  * Set up event listeners
  */
 function setupEventListeners(): void {
@@ -282,23 +300,6 @@ function setupEventListeners(): void {
 
   elements.factcheckEnabled.addEventListener('change', saveAPISettings);
   elements.factcheckKey.addEventListener('change', saveAPISettings);
-
-  // Whitelist
-  elements.whitelistAddBtn.addEventListener('click', async () => {
-    const domain = elements.whitelistInput.value.trim().toLowerCase();
-    if (domain) {
-      await addToWhitelist(domain);
-      elements.whitelistInput.value = '';
-      const prefs = await getPreferences();
-      renderWhitelist(prefs.whitelistedDomains);
-    }
-  });
-
-  elements.whitelistInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-      elements.whitelistAddBtn.click();
-    }
-  });
 
   // Data management
   elements.clearCache.addEventListener('click', async () => {
@@ -402,6 +403,440 @@ async function saveAPISettings(): Promise<void> {
   };
 
   await setExternalAPISettings(settings);
+}
+
+// ============================================
+// SITE PROFILES MANAGEMENT
+// ============================================
+
+/**
+ * Render profiles list
+ */
+async function renderProfiles(): Promise<void> {
+  const profiles = await getAllSiteProfiles();
+
+  if (profiles.length === 0) {
+    elements.profileList.innerHTML = '<p class="no-profiles">No profiles created yet. Create a profile to customize filter settings for specific sites.</p>';
+    return;
+  }
+
+  elements.profileList.innerHTML = profiles.map(profile => {
+    const domainCount = profile.domains.length;
+    const domainText = domainCount === 0
+      ? 'No domains assigned'
+      : domainCount <= 3
+        ? profile.domains.join(', ')
+        : `${profile.domains.slice(0, 3).join(', ')} +${domainCount - 3} more`;
+
+    const overrideCount = countOverrides(profile);
+    const overrideText = overrideCount === 0 ? '' : `${overrideCount} override${overrideCount > 1 ? 's' : ''}`;
+
+    return `
+      <div class="profile-card" data-profile-id="${profile.id}">
+        <div class="profile-card-header">
+          <h4 class="profile-card-name">${escapeHtml(profile.name)}</h4>
+          <button class="profile-edit-btn" title="Edit profile">Edit</button>
+        </div>
+        ${profile.description ? `<p class="profile-card-desc">${escapeHtml(profile.description)}</p>` : ''}
+        <div class="profile-card-meta">
+          <span class="profile-domains-count">${domainText}</span>
+          ${overrideText ? `<span class="profile-overrides-count">${overrideText}</span>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Add edit button listeners
+  elements.profileList.querySelectorAll('.profile-edit-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const card = (e.target as HTMLElement).closest('.profile-card');
+      const profileId = card?.getAttribute('data-profile-id');
+      if (profileId) {
+        openProfileModal(profileId);
+      }
+    });
+  });
+}
+
+/**
+ * Count number of active overrides in a profile
+ */
+function countOverrides(profile: SiteProfile): number {
+  let count = 0;
+  const o = profile.overrides;
+  if (o.displayMode !== undefined) count++;
+  if (o.minTruthScore !== undefined) count++;
+  if (o.minAuthenticity !== undefined) count++;
+  if (o.maxCoordination !== undefined) count++;
+  if (o.blockedIntents !== undefined) count++;
+  if (o.economicRange !== undefined) count++;
+  if (o.socialRange !== undefined) count++;
+  if (o.authorityRange !== undefined) count++;
+  if (o.globalismRange !== undefined) count++;
+  return count;
+}
+
+/**
+ * Escape HTML special characters
+ */
+function escapeHtml(text: string): string {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+/**
+ * Open profile modal for creating or editing
+ */
+async function openProfileModal(profileId?: string): Promise<void> {
+  editingProfileId = profileId || null;
+
+  if (profileId) {
+    // Editing existing profile
+    const profiles = await getAllSiteProfiles();
+    const profile = profiles.find(p => p.id === profileId);
+    if (!profile) return;
+
+    elements.modalTitle.textContent = 'Edit Profile';
+    elements.profileName.value = profile.name;
+    elements.profileDescription.value = profile.description || '';
+    modalDomains = [...profile.domains];
+
+    // Set override states
+    setOverrideState('DisplayMode', profile.overrides.displayMode);
+    setOverrideState('TruthScore', profile.overrides.minTruthScore);
+    setOverrideState('Authenticity', profile.overrides.minAuthenticity);
+    setOverrideState('Coordination', profile.overrides.maxCoordination);
+    setOverrideState('BlockedIntents', profile.overrides.blockedIntents);
+
+    // Set override values
+    if (profile.overrides.displayMode !== undefined) {
+      elements.profileDisplayMode.value = profile.overrides.displayMode;
+    }
+    if (profile.overrides.minTruthScore !== undefined) {
+      elements.profileTruthScore.value = String(profile.overrides.minTruthScore);
+      elements.profileTruthScoreValue.textContent = `${profile.overrides.minTruthScore}%`;
+    }
+    if (profile.overrides.minAuthenticity !== undefined) {
+      elements.profileAuthenticity.value = String(profile.overrides.minAuthenticity);
+      elements.profileAuthenticityValue.textContent = `${profile.overrides.minAuthenticity}%`;
+    }
+    if (profile.overrides.maxCoordination !== undefined) {
+      elements.profileCoordination.value = String(profile.overrides.maxCoordination);
+      elements.profileCoordinationValue.textContent = `${profile.overrides.maxCoordination}%`;
+    }
+    if (profile.overrides.blockedIntents !== undefined) {
+      elements.profileBlockTroll.checked = profile.overrides.blockedIntents.includes('troll');
+      elements.profileBlockBot.checked = profile.overrides.blockedIntents.includes('bot');
+      elements.profileBlockState.checked = profile.overrides.blockedIntents.includes('stateSponsored');
+      elements.profileBlockCommercial.checked = profile.overrides.blockedIntents.includes('commercial');
+      elements.profileBlockActivist.checked = profile.overrides.blockedIntents.includes('activist');
+    }
+
+    elements.profileDeleteBtn.style.display = 'block';
+  } else {
+    // Creating new profile
+    elements.modalTitle.textContent = 'Create Profile';
+    elements.profileName.value = '';
+    elements.profileDescription.value = '';
+    modalDomains = [];
+
+    // Reset all overrides to unchecked
+    resetProfileOverrides();
+    elements.profileDeleteBtn.style.display = 'none';
+  }
+
+  renderModalDomains();
+  elements.profileModal.style.display = 'flex';
+}
+
+/**
+ * Set override checkbox and control state
+ */
+function setOverrideState(name: string, value: unknown): void {
+  const checkbox = elements[`override${name}` as keyof typeof elements] as HTMLInputElement;
+  const hasValue = value !== undefined;
+
+  checkbox.checked = hasValue;
+
+  // Enable/disable the associated controls
+  updateOverrideControlState(name, hasValue);
+}
+
+/**
+ * Update the enabled/disabled state of override controls
+ */
+function updateOverrideControlState(name: string, enabled: boolean): void {
+  switch (name) {
+    case 'DisplayMode':
+      elements.profileDisplayMode.disabled = !enabled;
+      break;
+    case 'TruthScore':
+      elements.profileTruthScore.disabled = !enabled;
+      break;
+    case 'Authenticity':
+      elements.profileAuthenticity.disabled = !enabled;
+      break;
+    case 'Coordination':
+      elements.profileCoordination.disabled = !enabled;
+      break;
+    case 'BlockedIntents':
+      elements.profileBlockTroll.disabled = !enabled;
+      elements.profileBlockBot.disabled = !enabled;
+      elements.profileBlockState.disabled = !enabled;
+      elements.profileBlockCommercial.disabled = !enabled;
+      elements.profileBlockActivist.disabled = !enabled;
+      break;
+  }
+}
+
+/**
+ * Reset all profile override fields
+ */
+function resetProfileOverrides(): void {
+  // Uncheck all override checkboxes
+  elements.overrideDisplayMode.checked = false;
+  elements.overrideTruthScore.checked = false;
+  elements.overrideAuthenticity.checked = false;
+  elements.overrideCoordination.checked = false;
+  elements.overrideBlockedIntents.checked = false;
+
+  // Disable all controls
+  updateOverrideControlState('DisplayMode', false);
+  updateOverrideControlState('TruthScore', false);
+  updateOverrideControlState('Authenticity', false);
+  updateOverrideControlState('Coordination', false);
+  updateOverrideControlState('BlockedIntents', false);
+
+  // Reset values to defaults
+  elements.profileDisplayMode.value = 'badge';
+  elements.profileTruthScore.value = '0';
+  elements.profileTruthScoreValue.textContent = '0%';
+  elements.profileAuthenticity.value = '0';
+  elements.profileAuthenticityValue.textContent = '0%';
+  elements.profileCoordination.value = '100';
+  elements.profileCoordinationValue.textContent = '100%';
+  elements.profileBlockTroll.checked = false;
+  elements.profileBlockBot.checked = false;
+  elements.profileBlockState.checked = false;
+  elements.profileBlockCommercial.checked = false;
+  elements.profileBlockActivist.checked = false;
+}
+
+/**
+ * Render domains in modal
+ */
+function renderModalDomains(): void {
+  if (modalDomains.length === 0) {
+    elements.profileDomains.innerHTML = '<span class="no-domains">No domains added</span>';
+    return;
+  }
+
+  elements.profileDomains.innerHTML = modalDomains.map(domain => `
+    <span class="domain-tag" data-domain="${escapeHtml(domain)}">
+      ${escapeHtml(domain)}
+      <button class="domain-remove" title="Remove">&times;</button>
+    </span>
+  `).join('');
+
+  // Add remove listeners
+  elements.profileDomains.querySelectorAll('.domain-remove').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const tag = (e.target as HTMLElement).closest('.domain-tag');
+      const domain = tag?.getAttribute('data-domain');
+      if (domain) {
+        modalDomains = modalDomains.filter(d => d !== domain);
+        renderModalDomains();
+      }
+    });
+  });
+}
+
+/**
+ * Close profile modal
+ */
+function closeProfileModal(): void {
+  elements.profileModal.style.display = 'none';
+  editingProfileId = null;
+  modalDomains = [];
+}
+
+/**
+ * Save profile from modal
+ */
+async function saveProfile(): Promise<void> {
+  const name = elements.profileName.value.trim();
+  if (!name) {
+    alert('Please enter a profile name.');
+    return;
+  }
+
+  // Build overrides object (only include checked fields)
+  const overrides: SiteProfile['overrides'] = {};
+
+  if (elements.overrideDisplayMode.checked) {
+    overrides.displayMode = elements.profileDisplayMode.value as DisplayMode;
+  }
+  if (elements.overrideTruthScore.checked) {
+    overrides.minTruthScore = parseInt(elements.profileTruthScore.value);
+  }
+  if (elements.overrideAuthenticity.checked) {
+    overrides.minAuthenticity = parseInt(elements.profileAuthenticity.value);
+  }
+  if (elements.overrideCoordination.checked) {
+    overrides.maxCoordination = parseInt(elements.profileCoordination.value);
+  }
+  if (elements.overrideBlockedIntents.checked) {
+    const intents: AuthorIntent[] = [];
+    if (elements.profileBlockTroll.checked) intents.push('troll');
+    if (elements.profileBlockBot.checked) intents.push('bot');
+    if (elements.profileBlockState.checked) intents.push('stateSponsored');
+    if (elements.profileBlockCommercial.checked) intents.push('commercial');
+    if (elements.profileBlockActivist.checked) intents.push('activist');
+    overrides.blockedIntents = intents;
+  }
+
+  if (editingProfileId) {
+    // Update existing profile
+    await updateSiteProfile(editingProfileId, {
+      name,
+      description: elements.profileDescription.value.trim() || undefined,
+      domains: modalDomains,
+      overrides
+    });
+  } else {
+    // Create new profile
+    await createSiteProfile({
+      name,
+      description: elements.profileDescription.value.trim() || undefined,
+      domains: modalDomains,
+      overrides
+    });
+  }
+
+  closeProfileModal();
+  await renderProfiles();
+
+  // Notify content scripts about profile update
+  notifyProfileUpdate();
+}
+
+/**
+ * Delete current profile
+ */
+async function deleteProfile(): Promise<void> {
+  if (!editingProfileId) return;
+
+  if (!confirm('Are you sure you want to delete this profile? Domains assigned to this profile will fall back to global settings.')) {
+    return;
+  }
+
+  await deleteSiteProfile(editingProfileId);
+  closeProfileModal();
+  await renderProfiles();
+  notifyProfileUpdate();
+}
+
+/**
+ * Add domain to modal list
+ */
+function addDomainToModal(): void {
+  let domain = elements.profileDomainInput.value.trim().toLowerCase();
+
+  // Remove protocol and path if present
+  domain = domain.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+
+  if (!domain) return;
+
+  // Basic domain validation
+  if (!/^[a-z0-9]+([\-.][a-z0-9]+)*\.[a-z]{2,}$/i.test(domain) && !/^localhost(:\d+)?$/.test(domain)) {
+    alert('Please enter a valid domain (e.g., example.com)');
+    return;
+  }
+
+  if (modalDomains.includes(domain)) {
+    alert('This domain is already added.');
+    return;
+  }
+
+  modalDomains.push(domain);
+  elements.profileDomainInput.value = '';
+  renderModalDomains();
+}
+
+/**
+ * Notify content scripts that profiles have been updated
+ */
+function notifyProfileUpdate(): void {
+  chrome.tabs.query({}, (tabs) => {
+    tabs.forEach(tab => {
+      if (tab.id) {
+        chrome.tabs.sendMessage(tab.id, { type: 'PROFILE_UPDATED' }).catch(() => {
+          // Ignore errors for tabs without content script
+        });
+      }
+    });
+  });
+}
+
+/**
+ * Set up profile-related event listeners
+ */
+function setupProfileEventListeners(): void {
+  // Create profile button
+  elements.createProfileBtn.addEventListener('click', () => openProfileModal());
+
+  // Modal close buttons
+  elements.modalClose.addEventListener('click', closeProfileModal);
+  elements.profileCancelBtn.addEventListener('click', closeProfileModal);
+
+  // Close modal on backdrop click
+  elements.profileModal.addEventListener('click', (e) => {
+    if (e.target === elements.profileModal) {
+      closeProfileModal();
+    }
+  });
+
+  // Save and delete buttons
+  elements.profileSaveBtn.addEventListener('click', saveProfile);
+  elements.profileDeleteBtn.addEventListener('click', deleteProfile);
+
+  // Add domain button and enter key
+  elements.profileAddDomainBtn.addEventListener('click', addDomainToModal);
+  elements.profileDomainInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addDomainToModal();
+    }
+  });
+
+  // Override checkbox listeners
+  elements.overrideDisplayMode.addEventListener('change', () => {
+    updateOverrideControlState('DisplayMode', elements.overrideDisplayMode.checked);
+  });
+  elements.overrideTruthScore.addEventListener('change', () => {
+    updateOverrideControlState('TruthScore', elements.overrideTruthScore.checked);
+  });
+  elements.overrideAuthenticity.addEventListener('change', () => {
+    updateOverrideControlState('Authenticity', elements.overrideAuthenticity.checked);
+  });
+  elements.overrideCoordination.addEventListener('change', () => {
+    updateOverrideControlState('Coordination', elements.overrideCoordination.checked);
+  });
+  elements.overrideBlockedIntents.addEventListener('change', () => {
+    updateOverrideControlState('BlockedIntents', elements.overrideBlockedIntents.checked);
+  });
+
+  // Slider value displays
+  elements.profileTruthScore.addEventListener('input', () => {
+    elements.profileTruthScoreValue.textContent = `${elements.profileTruthScore.value}%`;
+  });
+  elements.profileAuthenticity.addEventListener('input', () => {
+    elements.profileAuthenticityValue.textContent = `${elements.profileAuthenticity.value}%`;
+  });
+  elements.profileCoordination.addEventListener('input', () => {
+    elements.profileCoordinationValue.textContent = `${elements.profileCoordination.value}%`;
+  });
 }
 
 // Initialize

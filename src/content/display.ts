@@ -16,7 +16,7 @@ import {
   formatFilterReason
 } from '../lib/classifier.js';
 import { getAuthenticityLabel, getCoordinationLabel, getAuthorIntentInfo } from '../lib/author-classifier.js';
-import { addToWhitelist } from '../lib/storage.js';
+import { createSiteProfile, getProfileForDomain } from '../lib/storage.js';
 
 // Element IDs
 const BADGE_ID = 'derigo-badge';
@@ -215,9 +215,21 @@ function applyOverlayMode(result: ClassificationResult, reason?: string): void {
     applyBadgeMode(result);
   });
 
-  // Always allow button
+  // Always allow button - creates a profile with displayMode: 'disabled'
   document.getElementById('derigo-always-allow')?.addEventListener('click', async () => {
-    await addToWhitelist(window.location.hostname);
+    const domain = window.location.hostname.replace(/^www\./, '');
+    // Check if domain already has a profile
+    const existingProfile = await getProfileForDomain(domain);
+    if (!existingProfile) {
+      await createSiteProfile({
+        name: `Trusted: ${domain}`,
+        description: 'Auto-created to skip analysis for this site',
+        domains: [domain],
+        overrides: {
+          displayMode: 'disabled'
+        }
+      });
+    }
     overlay.remove();
     document.body.style.overflow = '';
   });

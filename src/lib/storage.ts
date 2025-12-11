@@ -8,7 +8,8 @@ import type {
   KnownActorEntry,
   ExtractedAuthor,
   AuthorClassification,
-  AuthorCacheEntry
+  AuthorCacheEntry,
+  SiteProfile
 } from '../types/index.js';
 
 // Database constants
@@ -22,14 +23,15 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   authorityRange: null,
   globalismRange: null,
   minTruthScore: 0,
-  // Author filters (new)
+  // Author filters
   minAuthenticity: 0,
   maxCoordination: 100,
   blockedIntents: [],
   // Display
   displayMode: 'badge',
   enabled: true,
-  whitelistedDomains: []
+  // Site profiles
+  siteProfiles: []
 };
 
 // Default external API settings - ALL DISABLED
@@ -406,35 +408,191 @@ export async function isDatabaseSeeded(): Promise<boolean> {
   });
 }
 
-/**
- * Add domain to whitelist
- */
-export async function addToWhitelist(domain: string): Promise<void> {
-  const prefs = await getPreferences();
-  if (!prefs.whitelistedDomains.includes(domain)) {
-    await setPreferences({
-      whitelistedDomains: [...prefs.whitelistedDomains, domain]
-    });
-  }
-}
+// ============================================
+// Site Profile Functions
+// ============================================
 
 /**
- * Remove domain from whitelist
+ * Generate a UUID for profile IDs
  */
-export async function removeFromWhitelist(domain: string): Promise<void> {
-  const prefs = await getPreferences();
-  await setPreferences({
-    whitelistedDomains: prefs.whitelistedDomains.filter(d => d !== domain)
+function generateProfileId(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
   });
 }
 
 /**
- * Check if domain is whitelisted
+ * Create a new site profile
  */
-export async function isWhitelisted(domain: string): Promise<boolean> {
+export async function createSiteProfile(
+  profile: Omit<SiteProfile, 'id'>
+): Promise<string> {
   const prefs = await getPreferences();
-  return prefs.whitelistedDomains.includes(domain) ||
-         prefs.whitelistedDomains.includes(domain.replace(/^www\./, ''));
+  const id = generateProfileId();
+
+  const newProfile: SiteProfile = {
+    ...profile,
+    id
+  };
+
+  await setPreferences({
+    siteProfiles: [...prefs.siteProfiles, newProfile]
+  });
+
+  return id;
+}
+
+/**
+ * Update an existing site profile
+ */
+export async function updateSiteProfile(
+  id: string,
+  updates: Partial<Omit<SiteProfile, 'id'>>
+): Promise<void> {
+  const prefs = await getPreferences();
+
+  const profileIndex = prefs.siteProfiles.findIndex(p => p.id === id);
+  if (profileIndex === -1) {
+    throw new Error(`Profile not found: ${id}`);
+  }
+
+  const updatedProfiles = [...prefs.siteProfiles];
+  updatedProfiles[profileIndex] = {
+    ...updatedProfiles[profileIndex],
+    ...updates
+  };
+
+  await setPreferences({
+    siteProfiles: updatedProfiles
+  });
+}
+
+/**
+ * Delete a site profile
+ */
+export async function deleteSiteProfile(id: string): Promise<void> {
+  const prefs = await getPreferences();
+
+  await setPreferences({
+    siteProfiles: prefs.siteProfiles.filter(p => p.id !== id)
+  });
+}
+
+/**
+ * Get a site profile by ID
+ */
+export async function getSiteProfile(id: string): Promise<SiteProfile | null> {
+  const prefs = await getPreferences();
+  return prefs.siteProfiles.find(p => p.id === id) || null;
+}
+
+/**
+ * Get all site profiles
+ */
+export async function getAllSiteProfiles(): Promise<SiteProfile[]> {
+  const prefs = await getPreferences();
+  return prefs.siteProfiles;
+}
+
+/**
+ * Check if a domain matches a profile domain (supports subdomain matching)
+ */
+function domainMatchesPattern(domain: string, pattern: string): boolean {
+  const normalizedDomain = domain.replace(/^www\./, '').toLowerCase();
+  const normalizedPattern = pattern.replace(/^www\./, '').toLowerCase();
+
+  // Exact match
+  if (normalizedDomain === normalizedPattern) return true;
+
+  // Subdomain match (e.g., "news.bbc.com" matches "bbc.com")
+  if (normalizedDomain.endsWith('.' + normalizedPattern)) return true;
+
+  return false;
+}
+
+/**
+ * Get the profile that applies to a domain
+ * Uses most-specific-wins logic: longer matching domain takes priority
+ */
+export async function getProfileForDomain(domain: string): Promise<SiteProfile | null> {
+  const prefs = await getPreferences();
+
+  // Find all matching profiles
+  const matches: Array<{ profile: SiteProfile; matchLength: number }> = [];
+
+  for (const profile of prefs.siteProfiles) {
+    for (const patternDomain of profile.domains) {
+      if (domainMatchesPattern(domain, patternDomain)) {
+        matches.push({
+          profile,
+          matchLength: patternDomain.length
+        });
+        break; // One match per profile is enough
+      }
+    }
+  }
+
+  if (matches.length === 0) return null;
+
+  // Most specific wins (longest matching domain)
+  matches.sort((a, b) => b.matchLength - a.matchLength);
+  return matches[0].profile;
+}
+
+/**
+ * Add a domain to a profile
+ */
+export async function addDomainToProfile(
+  profileId: string,
+  domain: string
+): Promise<void> {
+  const prefs = await getPreferences();
+
+  const profile = prefs.siteProfiles.find(p => p.id === profileId);
+  if (!profile) {
+    throw new Error(`Profile not found: ${profileId}`);
+  }
+
+  // Normalize and check for duplicates
+  const normalizedDomain = domain.replace(/^www\./, '').toLowerCase();
+  if (profile.domains.includes(normalizedDomain)) {
+    return; // Already exists
+  }
+
+  await updateSiteProfile(profileId, {
+    domains: [...profile.domains, normalizedDomain]
+  });
+}
+
+/**
+ * Remove a domain from a profile
+ */
+export async function removeDomainFromProfile(
+  profileId: string,
+  domain: string
+): Promise<void> {
+  const prefs = await getPreferences();
+
+  const profile = prefs.siteProfiles.find(p => p.id === profileId);
+  if (!profile) {
+    throw new Error(`Profile not found: ${profileId}`);
+  }
+
+  const normalizedDomain = domain.replace(/^www\./, '').toLowerCase();
+
+  await updateSiteProfile(profileId, {
+    domains: profile.domains.filter(d => d !== normalizedDomain)
+  });
+}
+
+/**
+ * Check if a domain is disabled (either via profile or legacy whitelist)
+ */
+export async function isDomainDisabled(domain: string): Promise<boolean> {
+  const profile = await getProfileForDomain(domain);
+  return profile?.overrides.displayMode === 'disabled';
 }
 
 // ============================================

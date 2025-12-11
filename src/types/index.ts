@@ -83,6 +83,33 @@ export interface ContentSignals {
 }
 
 // ============================================
+// Site Profile Types
+// ============================================
+
+// Display mode including 'disabled' for skipping analysis entirely
+export type DisplayMode = 'block' | 'overlay' | 'badge' | 'off' | 'disabled';
+
+// Site profile for per-domain filter customization
+export interface SiteProfile {
+  id: string;                    // UUID
+  name: string;                  // e.g., "News Sites"
+  description?: string;
+  domains: string[];             // Assigned domains (supports subdomain matching)
+  // Partial overrides - undefined means "use global default"
+  overrides: {
+    economicRange?: [number, number] | null;
+    socialRange?: [number, number] | null;
+    authorityRange?: [number, number] | null;
+    globalismRange?: [number, number] | null;
+    minTruthScore?: number;
+    minAuthenticity?: number;
+    maxCoordination?: number;
+    blockedIntents?: AuthorIntent[];
+    displayMode?: DisplayMode;
+  };
+}
+
+// ============================================
 // Content Classification Types
 // ============================================
 
@@ -129,19 +156,19 @@ export interface UserPreferences {
   // Truthfulness threshold (0-100, content below this triggers action)
   minTruthScore: number;
 
-  // Author filters (new)
+  // Author filters
   minAuthenticity: number;           // 0-100, filter authors below this
   maxCoordination: number;           // 0-100, filter authors above this
   blockedIntents: AuthorIntent[];    // Block specific author types
 
-  // Display behavior
-  displayMode: 'block' | 'overlay' | 'badge' | 'off';
+  // Display behavior (global default, can be overridden by profiles)
+  displayMode: DisplayMode;
 
   // Extension enabled
   enabled: boolean;
 
-  // Whitelist domains
-  whitelistedDomains: string[];
+  // Site profiles for per-domain customization
+  siteProfiles: SiteProfile[];
 }
 
 // External API settings

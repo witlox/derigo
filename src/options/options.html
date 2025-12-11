@@ -271,19 +271,110 @@
         </div>
       </section>
 
-      <!-- Whitelist -->
+      <!-- Site Profiles -->
       <section class="settings-section">
-        <h2>Whitelisted Domains</h2>
-        <p class="section-desc">These domains will not be analyzed or filtered.</p>
+        <h2>Site Profiles</h2>
+        <p class="section-desc">Create custom filter profiles for different types of sites. Assign domains to profiles to override global settings.</p>
 
-        <div id="whitelist-container">
-          <div id="whitelist-items"></div>
-          <div class="whitelist-add">
-            <input type="text" id="whitelist-input" placeholder="example.com">
-            <button id="whitelist-add-btn">Add</button>
-          </div>
+        <div id="profiles-container">
+          <div id="profile-list"></div>
+          <button id="create-profile-btn" class="btn btn-primary">+ Create Profile</button>
         </div>
       </section>
+
+      <!-- Profile Editor Modal -->
+      <div id="profile-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3 id="modal-title">Create Profile</h3>
+            <button class="modal-close" id="modal-close">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label for="profile-name">Profile Name</label>
+              <input type="text" id="profile-name" placeholder="e.g., News Sites">
+            </div>
+            <div class="form-group">
+              <label for="profile-description">Description (optional)</label>
+              <input type="text" id="profile-description" placeholder="e.g., Mainstream news outlets">
+            </div>
+
+            <div class="form-group">
+              <label>Domains</label>
+              <div id="profile-domains" class="domain-list"></div>
+              <div class="domain-add">
+                <input type="text" id="profile-domain-input" placeholder="example.com">
+                <button id="profile-add-domain-btn" class="btn btn-small">Add</button>
+              </div>
+            </div>
+
+            <h4>Filter Overrides</h4>
+            <p class="override-desc">Check to override global settings for this profile. Unchecked items use global defaults.</p>
+
+            <div class="override-item">
+              <label>
+                <input type="checkbox" id="override-display-mode">
+                Display Mode
+              </label>
+              <select id="profile-display-mode" disabled>
+                <option value="badge">Badge</option>
+                <option value="overlay">Overlay</option>
+                <option value="block">Block</option>
+                <option value="off">Off</option>
+                <option value="disabled">Disabled (Skip Analysis)</option>
+              </select>
+            </div>
+
+            <div class="override-item">
+              <label>
+                <input type="checkbox" id="override-truth-score">
+                Min Truth Score
+              </label>
+              <input type="range" id="profile-truth-score" min="0" max="100" value="0" disabled>
+              <span id="profile-truth-score-value">0%</span>
+            </div>
+
+            <div class="override-item">
+              <label>
+                <input type="checkbox" id="override-authenticity">
+                Min Authenticity
+              </label>
+              <input type="range" id="profile-authenticity" min="0" max="100" value="0" disabled>
+              <span id="profile-authenticity-value">0%</span>
+            </div>
+
+            <div class="override-item">
+              <label>
+                <input type="checkbox" id="override-coordination">
+                Max Coordination
+              </label>
+              <input type="range" id="profile-coordination" min="0" max="100" value="100" disabled>
+              <span id="profile-coordination-value">100%</span>
+            </div>
+
+            <div class="override-item">
+              <label>
+                <input type="checkbox" id="override-blocked-intents">
+                Blocked Intents
+              </label>
+              <div id="profile-blocked-intents" class="checkboxes-inline">
+                <label><input type="checkbox" id="profile-block-troll" disabled> Troll</label>
+                <label><input type="checkbox" id="profile-block-bot" disabled> Bot</label>
+                <label><input type="checkbox" id="profile-block-state" disabled> State-Sponsored</label>
+                <label><input type="checkbox" id="profile-block-commercial" disabled> Commercial</label>
+                <label><input type="checkbox" id="profile-block-activist" disabled> Activist</label>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button id="profile-delete-btn" class="btn btn-danger" style="display: none;">Delete</button>
+            <div class="modal-actions">
+              <button id="profile-cancel-btn" class="btn btn-secondary">Cancel</button>
+              <button id="profile-save-btn" class="btn btn-primary">Save</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- Data Management -->
       <section class="settings-section">

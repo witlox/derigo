@@ -3,22 +3,23 @@
  * Runs on every page to analyze and classify content
  */
 
-import { classifyContent, determineFilterAction } from '../lib/classifier.js';
+import { classifyContent, determineFilterAction, getEffectivePreferences } from '../lib/classifier.js';
 import { extractPageContent, shouldAnalyzePage, getCacheTTL } from '../lib/extractor.js';
 import { extractAuthor } from '../lib/author-extractor.js';
 import {
   getPreferences,
   getCachedClassification,
   cacheClassification,
-  isWhitelisted
+  getProfileForDomain
 } from '../lib/storage.js';
-import type { ClassificationResult, FilterAction, ExtractedAuthor } from '../types/index.js';
+import type { ClassificationResult, FilterAction, ExtractedAuthor, SiteProfile } from '../types/index.js';
 import { applyDisplay, removeDisplay } from './display.js';
 
 // Store current classification for popup access
 let currentClassification: ClassificationResult | null = null;
 let currentFilterAction: FilterAction | null = null;
 let currentAuthor: ExtractedAuthor | null = null;
+let currentProfile: SiteProfile | null = null;
 
 /**
  * Main entry point
@@ -31,16 +32,22 @@ async function main(): Promise<void> {
   }
 
   // Check if extension is enabled
-  const prefs = await getPreferences();
-  if (!prefs.enabled) {
+  const globalPrefs = await getPreferences();
+  if (!globalPrefs.enabled) {
     console.log('[Derigo] Extension disabled');
     return;
   }
 
-  // Check if domain is whitelisted
+  // Look up site profile for this domain
   const domain = window.location.hostname;
-  if (await isWhitelisted(domain)) {
-    console.log('[Derigo] Domain whitelisted:', domain);
+  currentProfile = await getProfileForDomain(domain);
+
+  // Get effective preferences (merged with profile if applicable)
+  const { prefs } = await getEffectivePreferences(globalPrefs, domain);
+
+  // Check if domain is disabled (via profile with displayMode: 'disabled')
+  if (prefs.displayMode === 'disabled') {
+    console.log('[Derigo] Domain disabled via profile:', currentProfile?.name);
     return;
   }
 
@@ -49,7 +56,7 @@ async function main(): Promise<void> {
   if (cached) {
     console.log('[Derigo] Using cached classification');
     currentClassification = cached.result;
-    currentFilterAction = determineFilterAction(cached.result, prefs);
+    currentFilterAction = determineFilterAction(cached.result, prefs, currentProfile);
     applyDisplay(currentFilterAction, prefs);
     notifyBackgroundScript(cached.result);
     return;
@@ -86,8 +93,8 @@ async function main(): Promise<void> {
   const ttl = getCacheTTL(window.location.href);
   await cacheClassification(window.location.href, result, ttl);
 
-  // Determine filter action
-  currentFilterAction = determineFilterAction(result, prefs);
+  // Determine filter action (using effective prefs with profile)
+  currentFilterAction = determineFilterAction(result, prefs, currentProfile);
 
   // Apply display
   applyDisplay(currentFilterAction, prefs);
@@ -96,6 +103,9 @@ async function main(): Promise<void> {
   notifyBackgroundScript(result);
 
   console.log('[Derigo] Classification complete:', result);
+  if (currentProfile) {
+    console.log('[Derigo] Using profile:', currentProfile.name);
+  }
 }
 
 /**
@@ -119,14 +129,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({
         classification: currentClassification,
         filterAction: currentFilterAction,
-        author: currentAuthor
+        author: currentAuthor,
+        profile: currentProfile
       });
       break;
 
     case 'SETTINGS_UPDATED':
-      // Re-apply display with new settings
+      // Re-apply display with new settings (including profile)
       if (currentClassification) {
-        const newAction = determineFilterAction(currentClassification, message.data);
+        const newAction = determineFilterAction(currentClassification, message.data, currentProfile);
         currentFilterAction = newAction;
         removeDisplay();
         applyDisplay(newAction, message.data);
@@ -134,9 +145,26 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ success: true });
       break;
 
-    case 'WHITELIST_DOMAIN':
-      // Remove display when domain is whitelisted
-      removeDisplay();
+    case 'PROFILE_UPDATED':
+      // Re-fetch profile and re-apply
+      (async () => {
+        const domain = window.location.hostname;
+        currentProfile = await getProfileForDomain(domain);
+        const globalPrefs = await getPreferences();
+        const { prefs } = await getEffectivePreferences(globalPrefs, domain);
+
+        // Check if now disabled
+        if (prefs.displayMode === 'disabled') {
+          removeDisplay();
+          return;
+        }
+
+        if (currentClassification) {
+          currentFilterAction = determineFilterAction(currentClassification, prefs, currentProfile);
+          removeDisplay();
+          applyDisplay(currentFilterAction, prefs);
+        }
+      })();
       sendResponse({ success: true });
       break;
   }
@@ -155,6 +183,7 @@ const observer = new MutationObserver(() => {
     currentClassification = null;
     currentFilterAction = null;
     currentAuthor = null;
+    currentProfile = null;
     removeDisplay();
     main();
   }

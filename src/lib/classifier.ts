@@ -6,9 +6,11 @@ import type {
   UserPreferences,
   ExtractedAuthor,
   AuthorClassification,
-  FilterReason
+  FilterReason,
+  SiteProfile,
+  DisplayMode
 } from '../types/index.js';
-import { getKeywords, getSourceReputation, getCachedAuthor, cacheAuthor } from './storage.js';
+import { getKeywords, getSourceReputation, getCachedAuthor, cacheAuthor, getProfileForDomain } from './storage.js';
 import { classifyAuthor, getDefaultAuthorClassification } from './author-classifier.js';
 
 // In-memory cache for keywords (loaded once)
@@ -315,70 +317,135 @@ function inRange(value: number, range: [number, number] | null): boolean {
 /**
  * Map display mode to filter action
  */
-function mapDisplayModeToAction(displayMode: UserPreferences['displayMode']): FilterAction['action'] {
-  if (displayMode === 'off') return 'none';
+function mapDisplayModeToAction(displayMode: DisplayMode): FilterAction['action'] {
+  if (displayMode === 'off' || displayMode === 'disabled') return 'none';
   return displayMode;
 }
 
 /**
+ * Merge a site profile's overrides with global preferences
+ * Profile overrides take precedence; undefined values fall back to global
+ */
+export function mergeProfileWithPreferences(
+  globalPrefs: UserPreferences,
+  profile: SiteProfile | null
+): UserPreferences {
+  if (!profile) return globalPrefs;
+
+  const overrides = profile.overrides;
+
+  return {
+    ...globalPrefs,
+    // Apply overrides only if they are defined
+    economicRange: overrides.economicRange !== undefined
+      ? overrides.economicRange
+      : globalPrefs.economicRange,
+    socialRange: overrides.socialRange !== undefined
+      ? overrides.socialRange
+      : globalPrefs.socialRange,
+    authorityRange: overrides.authorityRange !== undefined
+      ? overrides.authorityRange
+      : globalPrefs.authorityRange,
+    globalismRange: overrides.globalismRange !== undefined
+      ? overrides.globalismRange
+      : globalPrefs.globalismRange,
+    minTruthScore: overrides.minTruthScore !== undefined
+      ? overrides.minTruthScore
+      : globalPrefs.minTruthScore,
+    minAuthenticity: overrides.minAuthenticity !== undefined
+      ? overrides.minAuthenticity
+      : globalPrefs.minAuthenticity,
+    maxCoordination: overrides.maxCoordination !== undefined
+      ? overrides.maxCoordination
+      : globalPrefs.maxCoordination,
+    blockedIntents: overrides.blockedIntents !== undefined
+      ? overrides.blockedIntents
+      : globalPrefs.blockedIntents,
+    displayMode: overrides.displayMode !== undefined
+      ? overrides.displayMode
+      : globalPrefs.displayMode
+  };
+}
+
+/**
+ * Get effective preferences for a domain
+ * Looks up any applicable profile and merges with global preferences
+ */
+export async function getEffectivePreferences(
+  globalPrefs: UserPreferences,
+  domain: string
+): Promise<{ prefs: UserPreferences; profile: SiteProfile | null }> {
+  const profile = await getProfileForDomain(domain);
+  const prefs = mergeProfileWithPreferences(globalPrefs, profile);
+  return { prefs, profile };
+}
+
+/**
  * Determine filter action based on classification and preferences
+ * Optionally accepts a domain to look up site-specific profiles
  */
 export function determineFilterAction(
   result: ClassificationResult,
-  prefs: UserPreferences
+  prefs: UserPreferences,
+  profile?: SiteProfile | null
 ): FilterAction {
-  const action = mapDisplayModeToAction(prefs.displayMode);
+  // If a profile is provided, merge it with preferences
+  const effectivePrefs = profile !== undefined
+    ? mergeProfileWithPreferences(prefs, profile)
+    : prefs;
 
-  // If display mode is off, return none regardless of filters
+  const action = mapDisplayModeToAction(effectivePrefs.displayMode);
+
+  // If display mode is off or disabled, return none regardless of filters
   if (action === 'none') {
     return { action: 'none', result };
   }
 
   // Check each axis against user preferences
-  if (!inRange(result.economic, prefs.economicRange)) {
+  if (!inRange(result.economic, effectivePrefs.economicRange)) {
     return { action, reason: 'economic', result };
   }
 
-  if (!inRange(result.social, prefs.socialRange)) {
+  if (!inRange(result.social, effectivePrefs.socialRange)) {
     return { action, reason: 'social', result };
   }
 
-  if (!inRange(result.authority, prefs.authorityRange)) {
+  if (!inRange(result.authority, effectivePrefs.authorityRange)) {
     return { action, reason: 'authority', result };
   }
 
-  if (!inRange(result.globalism, prefs.globalismRange)) {
+  if (!inRange(result.globalism, effectivePrefs.globalismRange)) {
     return { action, reason: 'globalism', result };
   }
 
   // Check truthfulness
-  if (result.truthScore < prefs.minTruthScore) {
+  if (result.truthScore < effectivePrefs.minTruthScore) {
     return { action, reason: 'truthfulness', result };
   }
 
   // Check author filters (if author classification exists)
   if (result.author) {
     // Check authenticity (filter if below minimum)
-    if (result.author.authenticity < prefs.minAuthenticity) {
+    if (result.author.authenticity < effectivePrefs.minAuthenticity) {
       return { action, reason: 'authenticity', result };
     }
 
     // Check coordination (filter if above maximum)
-    if (result.author.coordination > prefs.maxCoordination) {
+    if (result.author.coordination > effectivePrefs.maxCoordination) {
       return { action, reason: 'coordination', result };
     }
 
     // Check blocked intents
-    if (prefs.blockedIntents.length > 0) {
+    if (effectivePrefs.blockedIntents.length > 0) {
       const primaryIntent = result.author.intent.primary;
-      if (prefs.blockedIntents.includes(primaryIntent)) {
+      if (effectivePrefs.blockedIntents.includes(primaryIntent)) {
         return { action, reason: 'authorIntent', result };
       }
     }
   }
 
   // No filter triggered, but still show badge if enabled
-  if (prefs.displayMode === 'badge') {
+  if (effectivePrefs.displayMode === 'badge') {
     return { action: 'badge', result };
   }
 
