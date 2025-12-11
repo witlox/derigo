@@ -2,6 +2,7 @@ import * as esbuild from 'esbuild';
 import { copyFileSync, mkdirSync, existsSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
@@ -11,6 +12,22 @@ const dataDir = join(rootDir, 'data');
 
 const isWatch = process.argv.includes('--watch');
 const isProd = process.env.NODE_ENV === 'production';
+
+// Get version: major.minor from package.json, patch from commit count
+function getVersion() {
+  const pkg = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf-8'));
+  const [major, minor] = pkg.version.split('.').slice(0, 2);
+
+  let commitCount = '0';
+  try {
+    commitCount = execSync('git rev-list --count HEAD', { encoding: 'utf-8' }).trim();
+  } catch {
+    // Not a git repo or git not available, use 0
+    console.warn('Warning: Could not get git commit count, using 0');
+  }
+
+  return `${major}.${minor}.${commitCount}`;
+}
 
 // Ensure dist directories exist
 const dirs = ['dist', 'dist/icons', 'dist/data'];
@@ -42,14 +59,13 @@ const commonOptions = {
 };
 
 // Copy static files
-function copyStaticFiles() {
+function copyStaticFiles(version) {
   console.log('Copying static files...');
 
-  // Copy manifest
-  copyFileSync(
-    join(srcDir, 'manifest.json'),
-    join(distDir, 'manifest.json')
-  );
+  // Copy manifest with updated version
+  const manifest = JSON.parse(readFileSync(join(srcDir, 'manifest.json'), 'utf-8'));
+  manifest.version = version;
+  writeFileSync(join(distDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
   // Copy HTML files
   const htmlFiles = ['popup/popup.html', 'options/options.html'];
@@ -96,7 +112,8 @@ function copyStaticFiles() {
 
 async function build() {
   try {
-    console.log(`Building in ${isProd ? 'production' : 'development'} mode...`);
+    const version = getVersion();
+    console.log(`Building version ${version} in ${isProd ? 'production' : 'development'} mode...`);
 
     // Build each entry point separately to flatten output
     for (const entry of entries) {
@@ -107,8 +124,8 @@ async function build() {
       });
     }
 
-    copyStaticFiles();
-    console.log('Build complete!');
+    copyStaticFiles(version);
+    console.log(`Build complete! Version: ${version}`);
 
     if (isWatch) {
       console.log('Watch mode not yet implemented for flattened output');

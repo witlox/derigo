@@ -2,19 +2,26 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+    paths-ignore:
+      - '*.md'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   release:
-    name: Create Release
+    name: Build and Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for commit count
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -30,23 +37,30 @@ jobs:
 
       - name: Build extension
         run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Get version from build
+        id: version
+        run: |
+          VERSION=$(node -p "require('./dist/manifest.json').version")
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version $VERSION"
 
       - name: Package extension
         run: npm run package
 
-      - name: Get version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
       - name: Rename package with version
-        run: mv derigo.zip derigo-${{ steps.version.outputs.VERSION }}.zip
+        run: mv derigo.zip derigo-v${{ steps.version.outputs.VERSION }}.zip
 
-      - name: Create Release
+      - name: Create or Update Release
         uses: softprops/action-gh-release@v1
         with:
-          files: derigo-${{ steps.version.outputs.VERSION }}.zip
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          name: Release v${{ steps.version.outputs.VERSION }}
+          files: derigo-v${{ steps.version.outputs.VERSION }}.zip
           generate_release_notes: true
           draft: false
-          prerelease: ${{ contains(github.ref, '-beta') || contains(github.ref, '-alpha') || contains(github.ref, '-rc') }}
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

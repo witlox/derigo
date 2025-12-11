@@ -66,6 +66,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for commit count
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -94,6 +96,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for commit count
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -107,9 +111,16 @@ jobs:
       - name: Build and package
         run: npm run package
 
+      - name: Get version
+        id: version
+        run: echo "VERSION=$(node -p "require('./dist/manifest.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Rename package with version
+        run: mv derigo.zip derigo-v${{ steps.version.outputs.VERSION }}.zip
+
       - name: Upload packaged extension
         uses: actions/upload-artifact@v4
         with:
-          name: derigo-extension
-          path: derigo.zip
+          name: derigo-v${{ steps.version.outputs.VERSION }}
+          path: derigo-v${{ steps.version.outputs.VERSION }}.zip
           retention-days: 30
