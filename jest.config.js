@@ -19,8 +19,20 @@ export default {
   setupFilesAfterEnv: ['<rootDir>/tests/mocks/chrome.ts'],
   collectCoverageFrom: [
     'src/**/*.ts',
-    '!src/**/*.d.ts'
+    '!src/**/*.d.ts',
+    '!src/background/**/*.ts',
+    '!src/popup/**/*.ts',
+    '!src/options/**/*.ts',
+    '!src/content/display.ts'
   ],
   coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov', 'html']
+  coverageReporters: ['text', 'lcov', 'html', 'json-summary'],
+  coverageThreshold: {
+    global: {
+      branches: 40,
+      functions: 30,
+      lines: 40,
+      statements: 40
+    }
+  }
 };
