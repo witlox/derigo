@@ -20,6 +20,9 @@ interface ExternalAPISettings {
   claimBuster: ClaimBusterAPISettings;
   newsGuard: NewsGuardAPISettings;
   aiClassification: AIClassificationSettings;
+
+  // Author database APIs (new)
+  authorDatabase: AuthorDatabaseAPISettings;
 }
 
 // Default: Everything disabled
@@ -36,6 +39,11 @@ const DEFAULT_EXTERNAL_API_SETTINGS: ExternalAPISettings = {
     tier: 'standard',
     autoAnalyze: false,
     confidenceThreshold: 0.7
+  },
+  authorDatabase: {
+    enabled: false,
+    botSentinel: { enabled: false, apiKey: '', tier: 'free' },
+    coordinatedDisinfo: { enabled: false, apiKey: '' }
   }
 };
 
@@ -222,6 +230,134 @@ async function getNewsGuardRating(domain: string): Promise<NewsGuardRating | nul
 ```
 
 **Alternative (Free)**: The bundled source reputation database uses publicly available ratings from MediaBiasFactCheck, AllSides, and Ad Fontes Media. This works without any API calls.
+
+---
+
+## Author Database APIs (New)
+
+These APIs help identify known bad actors (bots, trolls, state-sponsored accounts). All are DISABLED by default.
+
+### Bot Sentinel API
+
+**Purpose**: Identify bot and troll accounts on Twitter/X.
+
+**Default State**: DISABLED
+
+**Tiers**:
+| Tier | Rate Limit | Cost | Features |
+|------|------------|------|----------|
+| Free | 50 lookups/day | $0 | Basic bot score |
+| Basic | 500 lookups/day | ~$10/mo | Bot score + history |
+| Pro | 5,000 lookups/day | ~$50/mo | Full analysis + bulk |
+
+**Settings**:
+```typescript
+interface BotSentinelSettings {
+  enabled: boolean;            // Default: false
+  apiKey: string;              // User provides
+  tier: 'free' | 'basic' | 'pro';
+  cacheResults: boolean;       // Cache lookups locally
+}
+
+const DEFAULT_BOT_SENTINEL_SETTINGS: BotSentinelSettings = {
+  enabled: false,
+  apiKey: '',
+  tier: 'free',
+  cacheResults: true
+};
+```
+
+**Usage**:
+```typescript
+interface BotSentinelResult {
+  username: string;
+  botScore: number;           // 0-100, higher = more bot-like
+  trollScore: number;         // 0-100, higher = more troll-like
+  category: 'normal' | 'problematic' | 'disruptive';
+  lastUpdated: string;
+}
+
+async function queryBotSentinel(username: string): Promise<BotSentinelResult | null> {
+  if (!await canMakeExternalCall('authorDatabase.botSentinel')) return null;
+
+  const settings = await getBotSentinelSettings();
+
+  const response = await fetch(`https://api.botsentinel.com/v1/account/${username}`, {
+    headers: {
+      'Authorization': `Bearer ${settings.apiKey}`
+    }
+  });
+
+  return await response.json();
+}
+```
+
+### Coordinated Disinformation Databases
+
+**Purpose**: Identify accounts linked to state-sponsored disinformation campaigns.
+
+**Default State**: DISABLED
+
+**Data Sources**:
+- **Hamilton 68 / ASD**: Tracks Russian-linked accounts
+- **EU DisinfoLab**: European disinformation research
+- **Stanford Internet Observatory**: Academic research data
+
+**Note**: Most of these are research-oriented and may require institutional access.
+
+**Settings**:
+```typescript
+interface CoordinatedDisinfoSettings {
+  enabled: boolean;             // Default: false
+  apiKey: string;               // If API access available
+  usePublicLists: boolean;      // Use bundled public lists
+}
+
+const DEFAULT_COORDINATED_DISINFO_SETTINGS: CoordinatedDisinfoSettings = {
+  enabled: false,
+  apiKey: '',
+  usePublicLists: true          // Still checks bundled list if enabled
+};
+```
+
+### Author Database Settings Structure
+
+```typescript
+interface AuthorDatabaseAPISettings {
+  enabled: boolean;             // Master switch for all author DB lookups
+  botSentinel: BotSentinelSettings;
+  coordinatedDisinfo: CoordinatedDisinfoSettings;
+}
+```
+
+### Bundled Known Actors Database
+
+The extension ships with a curated list of known bad actors that requires NO API calls:
+
+```typescript
+interface KnownActorEntry {
+  identifier: string;           // Username or pattern (e.g., "troll_farm_*")
+  platform: 'twitter' | 'reddit' | 'facebook' | 'all';
+  category: 'bot' | 'troll' | 'stateSponsored' | 'commercial';
+  confidence: number;           // 0-1
+  source: string;               // Attribution (e.g., "Stanford IO Report 2023")
+  addedDate: string;
+  attribution?: {
+    country?: string;           // e.g., "Russia", "China", "Iran"
+    campaign?: string;          // e.g., "Internet Research Agency"
+    organization?: string;
+  };
+}
+
+// Bundled data file: data/known-actors.json
+```
+
+**Update Strategy**:
+- Bundled list updated with each extension release
+- Sources: Public research reports, government disclosures, academic papers
+- No personal data stored - only verified institutional accounts
+
+---
 
 ## Source Reputation Database
 
@@ -563,26 +699,71 @@ The same prompt works across all providers:
 
 ```typescript
 function buildClassificationPrompt(request: AIClassificationRequest): string {
-  return `Analyze this content for political alignment and factual accuracy.
+  return `Analyze this content for political alignment, factual accuracy, and author characteristics.
 
 URL: ${request.url}
+${request.author ? `Author: ${request.author.identifier} (${request.author.platform})` : 'Author: Unknown'}
 
 Content (truncated to 2000 chars):
 ${request.content.slice(0, 2000)}
 
 Respond with a JSON object containing:
 {
-  "economic": { "score": <-100 to +100, left to right>, "reasoning": "<brief explanation>" },
-  "social": { "score": <-100 to +100, progressive to conservative>, "reasoning": "<brief explanation>" },
-  "authority": { "score": <-100 to +100, libertarian to authoritarian>, "reasoning": "<brief explanation>" },
-  "globalism": { "score": <-100 to +100, nationalist to globalist>, "reasoning": "<brief explanation>" },
-  "truthfulness": { "score": <0 to 100>, "reasoning": "<brief explanation>" },
+  "content": {
+    "economic": { "score": <-100 to +100, left to right>, "reasoning": "<brief explanation>" },
+    "social": { "score": <-100 to +100, progressive to conservative>, "reasoning": "<brief explanation>" },
+    "authority": { "score": <-100 to +100, libertarian to authoritarian>, "reasoning": "<brief explanation>" },
+    "globalism": { "score": <-100 to +100, nationalist to globalist>, "reasoning": "<brief explanation>" },
+    "truthfulness": { "score": <0 to 100>, "reasoning": "<brief explanation>" }
+  },
+  "author": {
+    "authenticity": { "score": <0 to 100, bot to human>, "reasoning": "<brief explanation>" },
+    "coordination": { "score": <0 to 100, organic to orchestrated>, "reasoning": "<brief explanation>" },
+    "intent": {
+      "primary": "<organic|troll|bot|stateSponsored|commercial|activist>",
+      "confidence": <0 to 1>,
+      "reasoning": "<brief explanation>"
+    }
+  },
   "confidence": <0 to 1>,
   "claims": [{ "claim": "<factual claim found>", "assessment": "<verified/unverified/false>" }]
 }
 
+For author analysis, look for:
+- Bot signals: repetitive phrasing, unnatural timing patterns, lack of personal voice
+- Troll signals: inflammatory language, personal attacks, bad-faith arguments
+- State-sponsored signals: coordinated narratives, foreign policy alignment, known talking points
+- Commercial signals: promotional language, product mentions, affiliate patterns
+
 Be objective and evidence-based. Only output valid JSON.`;
 }
+```
+
+### AI Response Types (Updated)
+
+```typescript
+interface AIClassificationResponse {
+  content: {
+    economic: { score: number; reasoning: string };
+    social: { score: number; reasoning: string };
+    authority: { score: number; reasoning: string };
+    globalism: { score: number; reasoning: string };
+    truthfulness: { score: number; reasoning: string };
+  };
+  author: {
+    authenticity: { score: number; reasoning: string };
+    coordination: { score: number; reasoning: string };
+    intent: {
+      primary: AuthorIntent;
+      confidence: number;
+      reasoning: string;
+    };
+  };
+  confidence: number;
+  claims: Array<{ claim: string; assessment: string }>;
+}
+
+type AuthorIntent = 'organic' | 'troll' | 'bot' | 'stateSponsored' | 'commercial' | 'activist';
 ```
 
 ### Settings UI

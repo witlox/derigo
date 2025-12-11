@@ -14,7 +14,7 @@ import {
   addToWhitelist,
   removeFromWhitelist
 } from '../lib/storage.js';
-import type { UserPreferences, ExternalAPISettings } from '../types/index.js';
+import type { UserPreferences, ExternalAPISettings, AuthorIntent } from '../types/index.js';
 
 // DOM Elements
 const elements = {
@@ -50,6 +50,17 @@ const elements = {
   // Truthfulness
   truthThreshold: document.getElementById('truth-threshold') as HTMLInputElement,
   truthThresholdValue: document.getElementById('truth-threshold-value') as HTMLElement,
+
+  // Author filters
+  minAuthenticity: document.getElementById('min-authenticity') as HTMLInputElement | null,
+  minAuthenticityValue: document.getElementById('min-authenticity-value') as HTMLElement | null,
+  maxCoordination: document.getElementById('max-coordination') as HTMLInputElement | null,
+  maxCoordinationValue: document.getElementById('max-coordination-value') as HTMLElement | null,
+  blockTroll: document.getElementById('block-troll') as HTMLInputElement | null,
+  blockBot: document.getElementById('block-bot') as HTMLInputElement | null,
+  blockStateSponsored: document.getElementById('block-state-sponsored') as HTMLInputElement | null,
+  blockCommercial: document.getElementById('block-commercial') as HTMLInputElement | null,
+  blockActivist: document.getElementById('block-activist') as HTMLInputElement | null,
 
   // External APIs
   allowExternal: document.getElementById('allow-external') as HTMLInputElement,
@@ -105,6 +116,21 @@ function updatePreferencesUI(prefs: UserPreferences): void {
   // Truthfulness
   elements.truthThreshold.value = String(prefs.minTruthScore);
   elements.truthThresholdValue.textContent = `${prefs.minTruthScore}%`;
+
+  // Author filters
+  if (elements.minAuthenticity && elements.minAuthenticityValue) {
+    elements.minAuthenticity.value = String(prefs.minAuthenticity);
+    elements.minAuthenticityValue.textContent = `${prefs.minAuthenticity}%`;
+  }
+  if (elements.maxCoordination && elements.maxCoordinationValue) {
+    elements.maxCoordination.value = String(prefs.maxCoordination);
+    elements.maxCoordinationValue.textContent = `${prefs.maxCoordination}%`;
+  }
+  if (elements.blockTroll) elements.blockTroll.checked = prefs.blockedIntents.includes('troll');
+  if (elements.blockBot) elements.blockBot.checked = prefs.blockedIntents.includes('bot');
+  if (elements.blockStateSponsored) elements.blockStateSponsored.checked = prefs.blockedIntents.includes('stateSponsored');
+  if (elements.blockCommercial) elements.blockCommercial.checked = prefs.blockedIntents.includes('commercial');
+  if (elements.blockActivist) elements.blockActivist.checked = prefs.blockedIntents.includes('activist');
 }
 
 /**
@@ -211,6 +237,35 @@ function setupEventListeners(): void {
   });
   elements.truthThreshold.addEventListener('change', savePreferences);
 
+  // Author filters
+  if (elements.minAuthenticity && elements.minAuthenticityValue) {
+    elements.minAuthenticity.addEventListener('input', () => {
+      elements.minAuthenticityValue!.textContent = `${elements.minAuthenticity!.value}%`;
+    });
+    elements.minAuthenticity.addEventListener('change', savePreferences);
+  }
+
+  if (elements.maxCoordination && elements.maxCoordinationValue) {
+    elements.maxCoordination.addEventListener('input', () => {
+      elements.maxCoordinationValue!.textContent = `${elements.maxCoordination!.value}%`;
+    });
+    elements.maxCoordination.addEventListener('change', savePreferences);
+  }
+
+  // Blocked intents
+  const intentCheckboxes = [
+    elements.blockTroll,
+    elements.blockBot,
+    elements.blockStateSponsored,
+    elements.blockCommercial,
+    elements.blockActivist
+  ];
+  intentCheckboxes.forEach(checkbox => {
+    if (checkbox) {
+      checkbox.addEventListener('change', savePreferences);
+    }
+  });
+
   // External APIs
   elements.allowExternal.addEventListener('change', async () => {
     elements.apiSettings.style.display = elements.allowExternal.checked ? 'block' : 'none';
@@ -290,10 +345,26 @@ async function savePreferences(): Promise<void> {
     economicRange: getAxisRange('economic'),
     socialRange: getAxisRange('social'),
     authorityRange: getAxisRange('authority'),
-    globalismRange: getAxisRange('globalism')
+    globalismRange: getAxisRange('globalism'),
+    minAuthenticity: elements.minAuthenticity ? parseInt(elements.minAuthenticity.value) : 0,
+    maxCoordination: elements.maxCoordination ? parseInt(elements.maxCoordination.value) : 100,
+    blockedIntents: getBlockedIntents()
   };
 
   await setPreferences(prefs);
+}
+
+/**
+ * Get blocked intents from checkboxes
+ */
+function getBlockedIntents(): AuthorIntent[] {
+  const blocked: AuthorIntent[] = [];
+  if (elements.blockTroll?.checked) blocked.push('troll');
+  if (elements.blockBot?.checked) blocked.push('bot');
+  if (elements.blockStateSponsored?.checked) blocked.push('stateSponsored');
+  if (elements.blockCommercial?.checked) blocked.push('commercial');
+  if (elements.blockActivist?.checked) blocked.push('activist');
+  return blocked;
 }
 
 /**

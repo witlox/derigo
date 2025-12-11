@@ -138,6 +138,68 @@
         </div>
       </section>
 
+      <!-- Author Filters -->
+      <section class="settings-section">
+        <h2>Author Filters</h2>
+        <p class="section-desc">Filter content based on detected author characteristics. These filters analyze author behavior patterns to identify potential bots, trolls, and coordinated campaigns.</p>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="min-authenticity">Minimum Authenticity Score</label>
+            <p>Filter out authors below this authenticity level (0 = bot-like, 100 = human)</p>
+          </div>
+          <div class="setting-control slider-control">
+            <input type="range" id="min-authenticity" min="0" max="100" value="0">
+            <span id="min-authenticity-value">0%</span>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="max-coordination">Maximum Coordination Score</label>
+            <p>Filter out authors above this coordination level (0 = organic, 100 = orchestrated)</p>
+          </div>
+          <div class="setting-control slider-control">
+            <input type="range" id="max-coordination" min="0" max="100" value="100">
+            <span id="max-coordination-value">100%</span>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label>Block Author Intent Types</label>
+            <p>Block content from authors classified as these types</p>
+          </div>
+          <div class="setting-control checkboxes">
+            <label class="checkbox-label">
+              <input type="checkbox" id="block-troll">
+              <span class="checkbox-text">Trolls</span>
+              <span class="checkbox-desc">Accounts primarily seeking to provoke</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="block-bot">
+              <span class="checkbox-text">Bots</span>
+              <span class="checkbox-desc">Automated accounts</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="block-state-sponsored">
+              <span class="checkbox-text">State-Sponsored</span>
+              <span class="checkbox-desc">Government influence operations</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="block-commercial">
+              <span class="checkbox-text">Commercial</span>
+              <span class="checkbox-desc">Promotional/advertising accounts</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="block-activist">
+              <span class="checkbox-text">Activists</span>
+              <span class="checkbox-desc">Organized advocacy accounts</span>
+            </label>
+          </div>
+        </div>
+      </section>
+
       <!-- External APIs -->
       <section class="settings-section">
         <h2>External APIs</h2>

@@ -1,0 +1,40 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-01-01T00:00:00Z",
+  "sources": [
+    "Stanford Internet Observatory",
+    "DFRLab",
+    "Graphika",
+    "Twitter Transparency Reports"
+  ],
+  "actors": [
+    {
+      "identifier": "example_known_bot",
+      "platform": "twitter",
+      "category": "bot",
+      "confidence": 0.95,
+      "source": "Example - Remove in production",
+      "addedDate": "2025-01-01",
+      "attribution": {
+        "campaign": "Example Campaign"
+      }
+    }
+  ],
+  "patterns": {
+    "botNamePatterns": [
+      "^[a-z]+[0-9]{6,}$",
+      "^user[0-9]{8,}$",
+      "^[A-Z][a-z]+[0-9]{4,}[A-Z][a-z]+$"
+    ],
+    "trollPatterns": [
+      "burner",
+      "throwaway",
+      "temp_account"
+    ],
+    "suspiciousDomains": [
+      "rt.com",
+      "sputniknews.com"
+    ]
+  },
+  "notes": "This is a starter database. For production use, integrate with external threat intelligence APIs like Bot Sentinel, or subscribe to academic reports from Stanford IO, DFRLab, etc."
+}

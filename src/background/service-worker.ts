@@ -7,9 +7,12 @@ import {
   initDatabase,
   seedInitialData,
   isDatabaseSeeded,
-  clearExpiredCache
+  clearExpiredCache,
+  clearExpiredAuthorCache,
+  seedKnownActors,
+  isKnownActorsSeeded
 } from '../lib/storage.js';
-import type { KeywordEntry, SourceEntry, ClassificationResult } from '../types/index.js';
+import type { KeywordEntry, SourceEntry, ClassificationResult, KnownActorEntry } from '../types/index.js';
 
 // Store latest classification per tab
 const tabClassifications = new Map<number, ClassificationResult>();
@@ -29,7 +32,13 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     await loadAndSeedData();
   }
 
-  // Set up periodic cache cleanup
+  // Seed known actors if needed
+  if (!await isKnownActorsSeeded()) {
+    console.log('[Derigo] Seeding known actors database...');
+    await loadAndSeedKnownActors();
+  }
+
+  // Set up periodic cache cleanup (includes author cache)
   chrome.alarms.create('cache-cleanup', { periodInMinutes: 60 });
 });
 
@@ -56,13 +65,35 @@ async function loadAndSeedData(): Promise<void> {
 }
 
 /**
+ * Load and seed known actors database
+ */
+async function loadAndSeedKnownActors(): Promise<void> {
+  try {
+    const response = await fetch(chrome.runtime.getURL('data/known-actors.json'));
+    const data = await response.json();
+    const actors: KnownActorEntry[] = data.actors || [];
+
+    if (actors.length > 0) {
+      await seedKnownActors(actors);
+      console.log('[Derigo] Known actors seeded:', actors.length, 'actors');
+    } else {
+      console.log('[Derigo] No known actors to seed');
+    }
+  } catch (error) {
+    console.error('[Derigo] Failed to seed known actors:', error);
+  }
+}
+
+/**
  * Handle alarms
  */
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'cache-cleanup') {
-    const cleared = await clearExpiredCache();
-    if (cleared > 0) {
-      console.log('[Derigo] Cleared', cleared, 'expired cache entries');
+    const clearedContent = await clearExpiredCache();
+    const clearedAuthors = await clearExpiredAuthorCache();
+    const total = clearedContent + clearedAuthors;
+    if (total > 0) {
+      console.log('[Derigo] Cleared', clearedContent, 'content +', clearedAuthors, 'author cache entries');
     }
   }
 });
@@ -129,6 +160,20 @@ function updateBadge(tabId: number, result: ClassificationResult): void {
   // Adjust for truth score
   if (result.truthScore < 40) {
     color = '#dc2626'; // Dark red for low truth
+  }
+
+  // Adjust for author authenticity (lower authenticity = more suspicious)
+  if (result.author) {
+    if (result.author.authenticity < 30) {
+      color = '#dc2626'; // Dark red for likely bot/fake
+    } else if (result.author.coordination > 70) {
+      color = '#f97316'; // Orange for coordinated content
+    }
+
+    // Override for known actors
+    if (result.author.knownActor) {
+      color = '#dc2626'; // Dark red for known bad actors
+    }
   }
 
   chrome.action.setBadgeBackgroundColor({ tabId, color });

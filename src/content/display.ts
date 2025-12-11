@@ -5,8 +5,17 @@
  * - Block: Full page block
  */
 
-import type { FilterAction, UserPreferences, ClassificationResult } from '../types/index.js';
-import { getScoreColor, getTruthIndicator, formatAxisLabel } from '../lib/classifier.js';
+import type { FilterAction, UserPreferences, ClassificationResult, AuthorClassification } from '../types/index.js';
+import {
+  getScoreColor,
+  getTruthIndicator,
+  formatAxisLabel,
+  getAuthenticityColor,
+  getCoordinationColor,
+  getIntentIndicator,
+  formatFilterReason
+} from '../lib/classifier.js';
+import { getAuthenticityLabel, getCoordinationLabel, getAuthorIntentInfo } from '../lib/author-classifier.js';
 import { addToWhitelist } from '../lib/storage.js';
 
 // Element IDs
@@ -102,11 +111,14 @@ function applyBadgeMode(result: ClassificationResult): void {
         ${renderRadarChart(result)}
       </div>
 
-      <div class="derigo-badge-axes">
-        ${renderAxisMini('Economic', result.economic)}
-        ${renderAxisMini('Social', result.social)}
-        ${renderAxisMini('Authority', result.authority)}
-        ${renderAxisMini('Globalism', result.globalism)}
+      <div class="derigo-badge-section">
+        <div class="derigo-section-title">Content</div>
+        <div class="derigo-badge-axes">
+          ${renderAxisMini('Economic', result.economic)}
+          ${renderAxisMini('Social', result.social)}
+          ${renderAxisMini('Authority', result.authority)}
+          ${renderAxisMini('Globalism', result.globalism)}
+        </div>
       </div>
 
       <div class="derigo-badge-truth">
@@ -117,6 +129,11 @@ function applyBadgeMode(result: ClassificationResult): void {
         <span class="derigo-truth-score ${truthIndicator.class}">
           ${result.truthScore}% ${truthIndicator.icon}
         </span>
+      </div>
+
+      <div class="derigo-badge-section">
+        <div class="derigo-section-title">Author</div>
+        ${renderAuthorBadge(result.author)}
       </div>
 
       <div class="derigo-badge-confidence">
@@ -270,59 +287,144 @@ function applyBlockMode(result: ClassificationResult, reason?: string): void {
 }
 
 /**
- * Render a mini radar chart (SVG)
+ * Render a 7-axis radar chart (SVG)
+ * Axes: Economic, Social, Authority, Globalism, Truth, Authenticity, Coordination
  */
 function renderRadarChart(result: ClassificationResult): string {
-  const size = 120;
+  const size = 140;
   const center = size / 2;
-  const radius = size / 2 - 10;
+  const radius = size / 2 - 20;
 
-  // Convert scores (-100 to 100) to radius (0 to 1)
-  const normalize = (score: number) => (score + 100) / 200;
-
-  const economic = normalize(result.economic);
-  const social = normalize(result.social);
-  const authority = normalize(result.authority);
-  const globalism = normalize(result.globalism);
-
-  // Calculate points (4 axes at 90° intervals)
-  const points = [
-    { x: center, y: center - radius * authority },           // Top (authority)
-    { x: center + radius * economic, y: center },            // Right (economic right)
-    { x: center, y: center + radius * (1 - authority) },     // Bottom (libertarian)
-    { x: center - radius * (1 - economic), y: center }       // Left (economic left)
+  // Define 7 axes with their properties
+  const axes = [
+    { name: 'Econ', value: result.economic, type: 'bipolar' },      // -100 to 100
+    { name: 'Social', value: result.social, type: 'bipolar' },      // -100 to 100
+    { name: 'Auth', value: result.authority, type: 'bipolar' },     // -100 to 100
+    { name: 'Global', value: result.globalism, type: 'bipolar' },   // -100 to 100
+    { name: 'Truth', value: result.truthScore, type: 'unipolar' },  // 0 to 100
+    { name: 'Human', value: result.author?.authenticity ?? 50, type: 'unipolar' }, // 0 to 100
+    { name: 'Organic', value: 100 - (result.author?.coordination ?? 0), type: 'unipolar' } // Inverted: 100 = organic
   ];
 
-  // Create polygon path
-  const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ') + ' Z';
+  const numAxes = axes.length;
+  const angleStep = (2 * Math.PI) / numAxes;
 
-  // Background grid
-  const gridLines = [0.25, 0.5, 0.75, 1].map(scale => {
-    const r = radius * scale;
-    return `<circle cx="${center}" cy="${center}" r="${r}" fill="none" stroke="#e5e7eb" stroke-width="1"/>`;
+  // Normalize values to 0-1 range
+  const normalize = (value: number, type: string) => {
+    if (type === 'bipolar') {
+      return (value + 100) / 200;
+    }
+    return value / 100;
+  };
+
+  // Calculate points for the data polygon
+  const dataPoints = axes.map((axis, i) => {
+    const angle = -Math.PI / 2 + i * angleStep;
+    const normalizedValue = normalize(axis.value, axis.type);
+    const r = radius * normalizedValue;
+    return {
+      x: center + r * Math.cos(angle),
+      y: center + r * Math.sin(angle)
+    };
+  });
+
+  // Create data polygon path
+  const dataPath = dataPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ') + ' Z';
+
+  // Background grid (concentric polygons)
+  const gridLevels = [0.25, 0.5, 0.75, 1];
+  const gridPolygons = gridLevels.map(scale => {
+    const gridPoints = axes.map((_, i) => {
+      const angle = -Math.PI / 2 + i * angleStep;
+      const r = radius * scale;
+      return `${(center + r * Math.cos(angle)).toFixed(1)},${(center + r * Math.sin(angle)).toFixed(1)}`;
+    }).join(' ');
+    return `<polygon points="${gridPoints}" fill="none" stroke="#e5e7eb" stroke-width="1"/>`;
   }).join('');
 
-  // Axis lines
-  const axisLines = `
-    <line x1="${center}" y1="${center - radius}" x2="${center}" y2="${center + radius}" stroke="#d1d5db" stroke-width="1"/>
-    <line x1="${center - radius}" y1="${center}" x2="${center + radius}" y2="${center}" stroke="#d1d5db" stroke-width="1"/>
-  `;
+  // Axis lines from center to each vertex
+  const axisLines = axes.map((_, i) => {
+    const angle = -Math.PI / 2 + i * angleStep;
+    const x2 = center + radius * Math.cos(angle);
+    const y2 = center + radius * Math.sin(angle);
+    return `<line x1="${center}" y1="${center}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#d1d5db" stroke-width="1"/>`;
+  }).join('');
 
-  // Labels
-  const labels = `
-    <text x="${center}" y="8" text-anchor="middle" class="derigo-radar-label">Auth</text>
-    <text x="${size - 2}" y="${center + 4}" text-anchor="end" class="derigo-radar-label">Right</text>
-    <text x="${center}" y="${size - 2}" text-anchor="middle" class="derigo-radar-label">Lib</text>
-    <text x="2" y="${center + 4}" text-anchor="start" class="derigo-radar-label">Left</text>
-  `;
+  // Labels at each axis
+  const labels = axes.map((axis, i) => {
+    const angle = -Math.PI / 2 + i * angleStep;
+    const labelRadius = radius + 12;
+    const x = center + labelRadius * Math.cos(angle);
+    const y = center + labelRadius * Math.sin(angle);
+    const anchor = Math.abs(angle) < 0.1 ? 'middle' :
+                   angle > 0 && angle < Math.PI ? 'start' : 'end';
+    const dy = angle > -0.1 && angle < 0.1 ? '-3' :
+               angle > Math.PI - 0.1 || angle < -Math.PI + 0.1 ? '6' : '3';
+    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" dy="${dy}" class="derigo-radar-label">${axis.name}</text>`;
+  }).join('');
+
+  // Determine polygon fill color based on author data
+  const hasAuthorData = result.author != null;
+  const fillColor = hasAuthorData ? 'rgba(59, 130, 246, 0.25)' : 'rgba(59, 130, 246, 0.3)';
+  const strokeColor = hasAuthorData ? '#3b82f6' : '#3b82f6';
 
   return `
     <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" class="derigo-radar-svg">
-      ${gridLines}
+      ${gridPolygons}
       ${axisLines}
-      <path d="${path}" fill="rgba(59, 130, 246, 0.3)" stroke="#3b82f6" stroke-width="2"/>
+      <path d="${dataPath}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="2"/>
       ${labels}
     </svg>
+  `;
+}
+
+/**
+ * Render author badge with intent and scores
+ */
+function renderAuthorBadge(author: AuthorClassification | undefined): string {
+  if (!author) {
+    return `
+      <div class="derigo-author-badge derigo-author-unknown">
+        <span class="derigo-author-icon">?</span>
+        <span class="derigo-author-label">Unknown Author</span>
+      </div>
+    `;
+  }
+
+  const intentInfo = getIntentIndicator(author.intent.primary);
+  const authenticityColor = getAuthenticityColor(author.authenticity);
+  const coordinationColor = getCoordinationColor(author.coordination);
+
+  return `
+    <div class="derigo-author-badge">
+      <div class="derigo-author-header">
+        <span class="derigo-author-icon" style="background: ${intentInfo.color}">${intentInfo.icon}</span>
+        <span class="derigo-author-label">${intentInfo.label}</span>
+        ${author.intent.confidence >= 0.7 ? '<span class="derigo-author-confidence">High confidence</span>' : ''}
+      </div>
+      <div class="derigo-author-scores">
+        <div class="derigo-author-score">
+          <span class="derigo-score-label">Authenticity</span>
+          <div class="derigo-score-bar">
+            <div class="derigo-score-fill" style="width: ${author.authenticity}%; background: ${authenticityColor}"></div>
+          </div>
+          <span class="derigo-score-value">${author.authenticity}%</span>
+        </div>
+        <div class="derigo-author-score">
+          <span class="derigo-score-label">Coordination</span>
+          <div class="derigo-score-bar">
+            <div class="derigo-score-fill" style="width: ${author.coordination}%; background: ${coordinationColor}"></div>
+          </div>
+          <span class="derigo-score-value">${author.coordination}%</span>
+        </div>
+      </div>
+      ${author.knownActor ? `
+        <div class="derigo-known-actor">
+          <span class="derigo-known-actor-badge">Known Actor</span>
+          <span class="derigo-known-actor-source">${author.knownActor.source}</span>
+        </div>
+      ` : ''}
+    </div>
   `;
 }
 
@@ -352,26 +454,66 @@ function renderClassificationCompact(result: ClassificationResult): string {
 
   return `
     <div class="derigo-classification-compact">
+      <div class="derigo-compact-section">
+        <div class="derigo-compact-title">Content Analysis</div>
+        <div class="derigo-axis-row">
+          <span>Economic:</span>
+          <span>${formatAxisLabel('economic', result.economic)} (${result.economic})</span>
+        </div>
+        <div class="derigo-axis-row">
+          <span>Social:</span>
+          <span>${formatAxisLabel('social', result.social)} (${result.social})</span>
+        </div>
+        <div class="derigo-axis-row">
+          <span>Authority:</span>
+          <span>${formatAxisLabel('authority', result.authority)} (${result.authority})</span>
+        </div>
+        <div class="derigo-axis-row">
+          <span>Globalism:</span>
+          <span>${formatAxisLabel('globalism', result.globalism)} (${result.globalism})</span>
+        </div>
+        <div class="derigo-axis-row derigo-truth-row">
+          <span>Truthfulness:</span>
+          <span class="${truthIndicator.class}">${result.truthScore}% - ${truthIndicator.label}</span>
+        </div>
+      </div>
+
+      ${result.author ? `
+        <div class="derigo-compact-section">
+          <div class="derigo-compact-title">Author Analysis</div>
+          ${renderAuthorCompact(result.author)}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+/**
+ * Render compact author display
+ */
+function renderAuthorCompact(author: AuthorClassification): string {
+  const intentInfo = getIntentIndicator(author.intent.primary);
+
+  return `
+    <div class="derigo-author-compact">
       <div class="derigo-axis-row">
-        <span>Economic:</span>
-        <span>${formatAxisLabel('economic', result.economic)} (${result.economic})</span>
+        <span>Intent:</span>
+        <span style="color: ${intentInfo.color}">${intentInfo.icon} ${intentInfo.label}</span>
       </div>
       <div class="derigo-axis-row">
-        <span>Social:</span>
-        <span>${formatAxisLabel('social', result.social)} (${result.social})</span>
+        <span>Authenticity:</span>
+        <span>${author.authenticity}% - ${getAuthenticityLabel(author.authenticity)}</span>
       </div>
       <div class="derigo-axis-row">
-        <span>Authority:</span>
-        <span>${formatAxisLabel('authority', result.authority)} (${result.authority})</span>
+        <span>Coordination:</span>
+        <span>${author.coordination}% - ${getCoordinationLabel(author.coordination)}</span>
       </div>
-      <div class="derigo-axis-row">
-        <span>Globalism:</span>
-        <span>${formatAxisLabel('globalism', result.globalism)} (${result.globalism})</span>
-      </div>
-      <div class="derigo-axis-row derigo-truth-row">
-        <span>Truthfulness:</span>
-        <span class="${truthIndicator.class}">${result.truthScore}% - ${truthIndicator.label}</span>
-      </div>
+      ${author.knownActor ? `
+        <div class="derigo-axis-row derigo-known-row">
+          <span>Known Actor:</span>
+          <span class="derigo-known-actor-inline">${author.knownActor.source}</span>
+        </div>
+      ` : ''}
     </div>
   `;
 }
@@ -384,17 +526,12 @@ function renderClassificationSummary(result: ClassificationResult): string {
 }
 
 /**
- * Format filter reason for display
+ * Format filter reason for display (wrapper for classifier function)
  */
 function formatReason(reason: string): string {
-  const labels: Record<string, string> = {
-    economic: 'Economic alignment outside your preferred range',
-    social: 'Social alignment outside your preferred range',
-    authority: 'Authority alignment outside your preferred range',
-    globalism: 'Globalism alignment outside your preferred range',
-    truthfulness: 'Truthfulness score below your threshold'
-  };
-  return labels[reason] || reason;
+  // Use the centralized formatFilterReason from classifier
+  // But cast to FilterReason type since we know these are valid reasons
+  return formatFilterReason(reason as import('../types/index.js').FilterReason);
 }
 
 /**
@@ -585,6 +722,164 @@ function getStyles(): string {
     .truth-medium-high { color: #84cc16; }
     .truth-medium { color: #f59e0b; }
     .truth-low { color: #ef4444; }
+
+    /* Section styles */
+    .derigo-badge-section {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .derigo-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    /* Author badge styles */
+    .derigo-author-badge {
+      background: #f9fafb;
+      border-radius: 8px;
+      padding: 10px;
+    }
+
+    .derigo-author-unknown {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #9ca3af;
+    }
+
+    .derigo-author-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .derigo-author-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: white;
+    }
+
+    .derigo-author-unknown .derigo-author-icon {
+      background: #9ca3af;
+    }
+
+    .derigo-author-label {
+      font-weight: 500;
+      font-size: 13px;
+    }
+
+    .derigo-author-confidence {
+      font-size: 10px;
+      color: #22c55e;
+      background: #dcfce7;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .derigo-author-scores {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .derigo-author-score {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .derigo-score-label {
+      font-size: 11px;
+      color: #666;
+      width: 70px;
+    }
+
+    .derigo-score-bar {
+      flex: 1;
+      height: 4px;
+      background: #e5e7eb;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .derigo-score-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.3s;
+    }
+
+    .derigo-score-value {
+      font-size: 11px;
+      color: #666;
+      width: 35px;
+      text-align: right;
+    }
+
+    .derigo-known-actor {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #e5e7eb;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .derigo-known-actor-badge {
+      font-size: 10px;
+      font-weight: 600;
+      color: #dc2626;
+      background: #fef2f2;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .derigo-known-actor-source {
+      font-size: 11px;
+      color: #666;
+    }
+
+    /* Compact section styles */
+    .derigo-compact-section {
+      margin-bottom: 12px;
+    }
+
+    .derigo-compact-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .derigo-compact-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #666;
+      margin-bottom: 6px;
+    }
+
+    .derigo-author-compact {
+      /* Uses axis-row styles */
+    }
+
+    .derigo-known-row {
+      border-top: 1px dashed #e5e7eb;
+      margin-top: 4px;
+      padding-top: 4px;
+    }
+
+    .derigo-known-actor-inline {
+      color: #dc2626;
+      font-size: 12px;
+    }
 
     /* Overlay styles */
     .derigo-overlay {

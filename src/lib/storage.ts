@@ -4,12 +4,16 @@ import type {
   CacheEntry,
   ClassificationResult,
   SourceEntry,
-  KeywordEntry
+  KeywordEntry,
+  KnownActorEntry,
+  ExtractedAuthor,
+  AuthorClassification,
+  AuthorCacheEntry
 } from '../types/index.js';
 
 // Database constants
 const DB_NAME = 'derigo';
-const DB_VERSION = 1;
+const DB_VERSION = 2;  // Updated for author classification
 
 // Default user preferences
 export const DEFAULT_PREFERENCES: UserPreferences = {
@@ -18,6 +22,11 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   authorityRange: null,
   globalismRange: null,
   minTruthScore: 0,
+  // Author filters (new)
+  minAuthenticity: 0,
+  maxCoordination: 100,
+  blockedIntents: [],
+  // Display
   displayMode: 'badge',
   enabled: true,
   whitelistedDomains: []
@@ -48,6 +57,15 @@ export const DEFAULT_EXTERNAL_API_SETTINGS: ExternalAPISettings = {
     tier: 'payg',
     autoAnalyze: false,
     confidenceThreshold: 0.7
+  },
+  authorDatabase: {
+    enabled: false,
+    botSentinel: {
+      enabled: false,
+      apiKey: '',
+      tier: 'free'
+    },
+    usePublicLists: true  // Use bundled known actors list
   }
 };
 
@@ -97,6 +115,24 @@ export async function initDatabase(): Promise<IDBDatabase> {
         });
         keywordStore.createIndex('axis', 'axis');
         keywordStore.createIndex('term', 'term');
+      }
+
+      // Author cache (new in version 2)
+      if (!database.objectStoreNames.contains('authors')) {
+        const authorStore = database.createObjectStore('authors', {
+          keyPath: 'authorKey'
+        });
+        authorStore.createIndex('timestamp', 'timestamp');
+        authorStore.createIndex('platform', 'platform');
+      }
+
+      // Known actors database (new in version 2)
+      if (!database.objectStoreNames.contains('knownActors')) {
+        const actorStore = database.createObjectStore('knownActors', {
+          keyPath: 'actorKey'
+        });
+        actorStore.createIndex('platform', 'platform');
+        actorStore.createIndex('category', 'category');
       }
     };
   });
@@ -171,9 +207,15 @@ export async function canMakeExternalCall(apiName: keyof Omit<ExternalAPISetting
   // Master switch must be on
   if (!settings.allowExternalCalls) return false;
 
-  // Individual API must be enabled with valid key
+  // Individual API must be enabled
   const apiSettings = settings[apiName];
-  if (!apiSettings?.enabled || !apiSettings?.apiKey) return false;
+  if (!apiSettings?.enabled) return false;
+
+  // Check for apiKey for APIs that require it (not authorDatabase)
+  if (apiName !== 'authorDatabase') {
+    const settingsWithKey = apiSettings as { apiKey?: string };
+    if (!settingsWithKey.apiKey) return false;
+  }
 
   return true;
 }
@@ -393,4 +435,242 @@ export async function isWhitelisted(domain: string): Promise<boolean> {
   const prefs = await getPreferences();
   return prefs.whitelistedDomains.includes(domain) ||
          prefs.whitelistedDomains.includes(domain.replace(/^www\./, ''));
+}
+
+// ============================================
+// Author Cache Functions
+// ============================================
+
+/**
+ * Get author cache key
+ */
+function getAuthorCacheKey(author: ExtractedAuthor): string {
+  return `${author.platform}:${author.identifier}`;
+}
+
+/**
+ * Get cached author classification
+ */
+export async function getCachedAuthor(author: ExtractedAuthor): Promise<AuthorCacheEntry | null> {
+  const database = await getDB();
+  const key = getAuthorCacheKey(author);
+
+  return new Promise((resolve) => {
+    const tx = database.transaction('authors', 'readonly');
+    const store = tx.objectStore('authors');
+    const request = store.get(key);
+
+    request.onsuccess = () => {
+      const entry = request.result as AuthorCacheEntry | undefined;
+      if (entry && Date.now() - entry.timestamp < entry.ttl) {
+        resolve(entry);
+      } else {
+        resolve(null);
+      }
+    };
+    request.onerror = () => resolve(null);
+  });
+}
+
+/**
+ * Cache an author classification
+ */
+export async function cacheAuthor(
+  author: ExtractedAuthor,
+  classification: AuthorClassification,
+  source: 'local' | 'external' | 'ai' = 'local'
+): Promise<void> {
+  const database = await getDB();
+  const key = getAuthorCacheKey(author);
+
+  // TTL varies by data quality and platform
+  let ttl = 6 * 60 * 60 * 1000; // 6 hours default
+  if (classification.dataQuality === 'high') {
+    ttl = 7 * 24 * 60 * 60 * 1000; // 7 days for high confidence
+  } else if (['twitter', 'reddit'].includes(author.platform)) {
+    ttl = 12 * 60 * 60 * 1000; // 12 hours for social media
+  }
+
+  const entry: AuthorCacheEntry = {
+    authorKey: key,
+    classification,
+    timestamp: Date.now(),
+    ttl,
+    source
+  };
+
+  return new Promise((resolve, reject) => {
+    const tx = database.transaction('authors', 'readwrite');
+    const store = tx.objectStore('authors');
+    const request = store.put(entry);
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Clear expired author cache entries
+ */
+export async function clearExpiredAuthorCache(): Promise<number> {
+  const database = await getDB();
+  const now = Date.now();
+  let cleared = 0;
+
+  return new Promise((resolve) => {
+    const tx = database.transaction('authors', 'readwrite');
+    const store = tx.objectStore('authors');
+    const request = store.openCursor();
+
+    request.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest).result as IDBCursorWithValue | null;
+      if (cursor) {
+        const entry = cursor.value as AuthorCacheEntry;
+        if (now - entry.timestamp >= entry.ttl) {
+          cursor.delete();
+          cleared++;
+        }
+        cursor.continue();
+      } else {
+        resolve(cleared);
+      }
+    };
+    request.onerror = () => resolve(cleared);
+  });
+}
+
+// ============================================
+// Known Actors Functions
+// ============================================
+
+// In-memory cache for known actors
+let knownActorsCache: Map<string, KnownActorEntry> | null = null;
+
+/**
+ * Get known actor entry for an author
+ */
+export async function getKnownActor(author: ExtractedAuthor): Promise<KnownActorEntry | null> {
+  // Try memory cache first
+  if (knownActorsCache) {
+    const key = `${author.platform}:${author.identifier}`;
+    const allKey = `all:${author.identifier}`;
+    return knownActorsCache.get(key) || knownActorsCache.get(allKey) || null;
+  }
+
+  // Fall back to database lookup
+  const database = await getDB();
+  const key = `${author.platform}:${author.identifier}`;
+
+  return new Promise((resolve) => {
+    const tx = database.transaction('knownActors', 'readonly');
+    const store = tx.objectStore('knownActors');
+
+    // Try exact platform match
+    const request1 = store.get(key);
+    request1.onsuccess = () => {
+      if (request1.result) {
+        resolve(request1.result);
+        return;
+      }
+
+      // Try "all" platform match
+      const allKey = `all:${author.identifier}`;
+      const request2 = store.get(allKey);
+      request2.onsuccess = () => resolve(request2.result || null);
+      request2.onerror = () => resolve(null);
+    };
+    request1.onerror = () => resolve(null);
+  });
+}
+
+/**
+ * Seed known actors from data file
+ */
+export async function seedKnownActors(actors: KnownActorEntry[]): Promise<void> {
+  const database = await getDB();
+
+  // Clear existing entries
+  const clearTx = database.transaction('knownActors', 'readwrite');
+  const clearStore = clearTx.objectStore('knownActors');
+  await new Promise<void>((resolve) => {
+    const clearRequest = clearStore.clear();
+    clearRequest.onsuccess = () => resolve();
+  });
+
+  // Add new entries
+  const tx = database.transaction('knownActors', 'readwrite');
+  const store = tx.objectStore('knownActors');
+
+  for (const actor of actors) {
+    const key = `${actor.platform}:${actor.identifier}`;
+    store.put({ ...actor, actorKey: key });
+  }
+
+  // Update memory cache
+  knownActorsCache = new Map();
+  for (const actor of actors) {
+    const key = `${actor.platform}:${actor.identifier}`;
+    knownActorsCache.set(key, actor);
+  }
+
+  return new Promise((resolve) => {
+    tx.oncomplete = () => resolve();
+  });
+}
+
+/**
+ * Load known actors into memory cache
+ */
+export async function loadKnownActorsCache(): Promise<void> {
+  const database = await getDB();
+
+  return new Promise((resolve) => {
+    const tx = database.transaction('knownActors', 'readonly');
+    const store = tx.objectStore('knownActors');
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      knownActorsCache = new Map();
+      for (const actor of request.result) {
+        knownActorsCache.set(actor.actorKey, actor);
+      }
+      resolve();
+    };
+    request.onerror = () => {
+      knownActorsCache = new Map();
+      resolve();
+    };
+  });
+}
+
+/**
+ * Get all known actors
+ */
+export async function getAllKnownActors(): Promise<KnownActorEntry[]> {
+  const database = await getDB();
+
+  return new Promise((resolve) => {
+    const tx = database.transaction('knownActors', 'readonly');
+    const store = tx.objectStore('knownActors');
+    const request = store.getAll();
+
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => resolve([]);
+  });
+}
+
+/**
+ * Check if known actors database has been seeded
+ */
+export async function isKnownActorsSeeded(): Promise<boolean> {
+  const database = await getDB();
+
+  return new Promise((resolve) => {
+    const tx = database.transaction('knownActors', 'readonly');
+    const store = tx.objectStore('knownActors');
+    const request = store.count();
+
+    request.onsuccess = () => resolve(request.result > 0);
+    request.onerror = () => resolve(false);
+  });
 }

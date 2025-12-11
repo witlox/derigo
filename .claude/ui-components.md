@@ -1,5 +1,16 @@
 # UI Components and Display Modes
 
+## Overview
+
+The UI displays classification results in a unified **7-axis radar chart** combining:
+- **Content axes** (4): Economic, Social, Authority, Globalism
+- **Author axes** (2): Authenticity, Coordination (inverted)
+- **Quality axis** (1): Truthfulness
+
+Author intent is displayed as a categorical badge alongside the radar chart.
+
+---
+
 ## Display Mode Implementations
 
 ### 1. Block Mode
@@ -22,7 +33,8 @@ function applyBlockMode(result, reason) {
 
         <div class="derigo-details">
           <h3>Classification Results:</h3>
-          ${renderClassificationSummary(result)}
+          ${renderRadarChart(result)}
+          ${renderAuthorBadge(result.author)}
           <p class="derigo-filter-reason">
             <strong>Blocked due to:</strong> ${formatReason(reason)}
           </p>
@@ -73,7 +85,8 @@ function applyOverlayMode(result, reason) {
         <h2>Content Warning</h2>
         <p>This content matches your filter criteria:</p>
 
-        ${renderClassificationCompact(result)}
+        ${renderRadarChartCompact(result)}
+        ${renderAuthorBadge(result.author)}
 
         <p class="derigo-filter-note">
           <strong>Triggered by:</strong> ${formatReason(reason)}
@@ -120,13 +133,14 @@ function applyBadgeMode(result) {
   badge.className = 'derigo-badge';
   badge.setAttribute('data-position', 'bottom-right'); // Configurable
 
-  // Color based on combined score
-  const color = getScoreColor(result);
-  const truthIndicator = getTruthIndicator(result.truthScore);
+  // Color based on combined score and author status
+  const color = getBadgeColor(result);
+  const authorIndicator = getAuthorIndicator(result.author);
 
   badge.innerHTML = `
     <div class="derigo-badge-icon" style="background: ${color}">
       D
+      ${authorIndicator.warning ? '<span class="derigo-author-warning">!</span>' : ''}
     </div>
     <div class="derigo-badge-expanded">
       <div class="derigo-badge-header">
@@ -134,18 +148,14 @@ function applyBadgeMode(result) {
         <button class="derigo-badge-close">×</button>
       </div>
 
-      <div class="derigo-badge-axes">
-        ${renderAxisMini('Economic', result.economic)}
-        ${renderAxisMini('Social', result.social)}
-        ${renderAxisMini('Authority', result.authority)}
-        ${renderAxisMini('Globalism', result.globalism)}
+      <!-- 7-axis Radar Chart -->
+      <div class="derigo-radar-container">
+        ${renderRadarChart(result)}
       </div>
 
-      <div class="derigo-badge-truth">
-        <span class="derigo-truth-label">Truthfulness</span>
-        <span class="derigo-truth-score ${truthIndicator.class}">
-          ${result.truthScore}% ${truthIndicator.icon}
-        </span>
+      <!-- Author Intent Badge -->
+      <div class="derigo-author-section">
+        ${renderAuthorBadge(result.author)}
       </div>
 
       <div class="derigo-badge-confidence">
@@ -167,21 +177,151 @@ function applyBadgeMode(result) {
   };
 }
 
-function renderAxisMini(name, value) {
-  const position = ((value + 100) / 200) * 100; // Convert -100..100 to 0..100
-  const label = value < -33 ? 'L' : value > 33 ? 'R' : 'C';
+function getAuthorIndicator(author) {
+  // Warning if author is suspicious
+  const warning = author.authenticity < 40 ||
+                  author.coordination > 60 ||
+                  ['bot', 'troll', 'stateSponsored'].includes(author.intent.primary);
+
+  return { warning };
+}
+```
+
+---
+
+## 7-Axis Radar Chart
+
+The radar chart visualizes all classification dimensions in a unified display.
+
+### Radar Chart Rendering
+
+```javascript
+function renderRadarChart(result) {
+  const size = 200;
+  const center = size / 2;
+  const maxRadius = size / 2 - 20;
+
+  // 7 axes at equal angles (360/7 ≈ 51.4° apart)
+  const axes = [
+    { name: 'Economic', value: normalizeScore(result.content.economic), color: '#3b82f6' },
+    { name: 'Social', value: normalizeScore(result.content.social), color: '#8b5cf6' },
+    { name: 'Authority', value: normalizeScore(result.content.authority), color: '#ec4899' },
+    { name: 'Globalism', value: normalizeScore(result.content.globalism), color: '#f59e0b' },
+    { name: 'Authenticity', value: result.author.authenticity, color: '#10b981' },
+    { name: 'Organic', value: 100 - result.author.coordination, color: '#06b6d4' }, // Inverted
+    { name: 'Truth', value: result.content.truthScore, color: '#22c55e' }
+  ];
+
+  const angleStep = (2 * Math.PI) / axes.length;
+
+  // Calculate points for the polygon
+  const points = axes.map((axis, i) => {
+    const angle = i * angleStep - Math.PI / 2; // Start from top
+    const radius = (axis.value / 100) * maxRadius;
+    return {
+      x: center + radius * Math.cos(angle),
+      y: center + radius * Math.sin(angle)
+    };
+  });
+
+  const polygonPoints = points.map(p => `${p.x},${p.y}`).join(' ');
+
+  // Generate axis lines and labels
+  const axisLines = axes.map((axis, i) => {
+    const angle = i * angleStep - Math.PI / 2;
+    const endX = center + maxRadius * Math.cos(angle);
+    const endY = center + maxRadius * Math.sin(angle);
+    const labelX = center + (maxRadius + 15) * Math.cos(angle);
+    const labelY = center + (maxRadius + 15) * Math.sin(angle);
+
+    return `
+      <line x1="${center}" y1="${center}" x2="${endX}" y2="${endY}"
+            stroke="#e5e7eb" stroke-width="1"/>
+      <text x="${labelX}" y="${labelY}" text-anchor="middle"
+            dominant-baseline="middle" font-size="9" fill="#6b7280">
+        ${axis.name.substring(0, 4)}
+      </text>
+    `;
+  }).join('');
+
+  // Generate concentric circles (25%, 50%, 75%, 100%)
+  const circles = [0.25, 0.5, 0.75, 1].map(pct => `
+    <circle cx="${center}" cy="${center}" r="${maxRadius * pct}"
+            fill="none" stroke="#e5e7eb" stroke-width="1" stroke-dasharray="2,2"/>
+  `).join('');
 
   return `
-    <div class="derigo-axis-mini">
-      <span class="derigo-axis-name">${name}</span>
-      <div class="derigo-axis-bar">
-        <div class="derigo-axis-marker" style="left: ${position}%"></div>
+    <svg width="${size}" height="${size}" class="derigo-radar-chart">
+      ${circles}
+      ${axisLines}
+      <polygon points="${polygonPoints}"
+               fill="rgba(59, 130, 246, 0.2)"
+               stroke="#3b82f6" stroke-width="2"/>
+      ${points.map((p, i) => `
+        <circle cx="${p.x}" cy="${p.y}" r="4"
+                fill="${axes[i].color}" stroke="white" stroke-width="1"/>
+      `).join('')}
+    </svg>
+  `;
+}
+
+function normalizeScore(score) {
+  // Convert -100..100 to 0..100 for radar display
+  return (score + 100) / 2;
+}
+
+function renderRadarChartCompact(result) {
+  // Smaller version for overlay/inline display
+  // Same logic, just smaller size (120px)
+  // ... implementation similar but scaled down
+}
+```
+
+### Author Badge Rendering
+
+```javascript
+function renderAuthorBadge(author) {
+  const intentConfig = {
+    organic: { label: 'Organic', color: '#22c55e', icon: '✓' },
+    troll: { label: 'Troll', color: '#ef4444', icon: '🔥' },
+    bot: { label: 'Bot', color: '#f59e0b', icon: '🤖' },
+    stateSponsored: { label: 'State-Sponsored', color: '#dc2626', icon: '🏛️' },
+    commercial: { label: 'Commercial', color: '#8b5cf6', icon: '💰' },
+    activist: { label: 'Activist', color: '#3b82f6', icon: '📢' }
+  };
+
+  const config = intentConfig[author.intent.primary];
+  const confidencePercent = Math.round(author.intent.confidence * 100);
+
+  const authenticityLabel = author.authenticity < 40 ? 'Suspicious' :
+                           author.authenticity < 70 ? 'Unclear' : 'Human';
+
+  return `
+    <div class="derigo-author-badge">
+      <div class="derigo-author-intent" style="background: ${config.color}">
+        <span class="derigo-intent-icon">${config.icon}</span>
+        <span class="derigo-intent-label">${config.label}</span>
+        <span class="derigo-intent-confidence">${confidencePercent}%</span>
       </div>
-      <span class="derigo-axis-value">${label}</span>
+      <div class="derigo-author-metrics">
+        <span class="derigo-authenticity ${authenticityLabel.toLowerCase()}">
+          ${authenticityLabel} (${author.authenticity}%)
+        </span>
+        <span class="derigo-data-quality">
+          Data: ${author.dataQuality}
+        </span>
+      </div>
+      ${author.authorId ? `
+        <div class="derigo-author-id">
+          @${author.authorId}
+        </div>
+      ` : ''}
     </div>
   `;
 }
 ```
+
+---
 
 ## CSS Styles
 
@@ -357,6 +497,86 @@ function renderAxisMini(name, value) {
 .derigo-truth-high { color: #22c55e; }
 .derigo-truth-medium { color: #f59e0b; }
 .derigo-truth-low { color: #ef4444; }
+
+/* Radar chart styles */
+.derigo-radar-container {
+  display: flex;
+  justify-content: center;
+  padding: 8px;
+}
+
+.derigo-radar-chart {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Author badge styles */
+.derigo-author-badge {
+  margin-top: 12px;
+  padding: 8px;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.derigo-author-intent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 16px;
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.derigo-intent-icon {
+  font-size: 14px;
+}
+
+.derigo-intent-confidence {
+  opacity: 0.8;
+  font-size: 11px;
+}
+
+.derigo-author-metrics {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.derigo-authenticity.suspicious { color: #ef4444; }
+.derigo-authenticity.unclear { color: #f59e0b; }
+.derigo-authenticity.human { color: #22c55e; }
+
+.derigo-author-id {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* Author warning indicator on badge icon */
+.derigo-author-warning {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  background: #ef4444;
+  color: white;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid white;
+}
+
+.derigo-badge-icon {
+  position: relative;
+}
 ```
 
 ## Popup UI Design
@@ -476,13 +696,30 @@ function renderAxisMini(name, value) {
 ## Options Page Design
 
 Full settings page with:
-- Filter range sliders for each axis
+
+### Content Filters
+- Filter range sliders for each axis (Economic, Social, Authority, Globalism)
 - Truthfulness threshold slider
-- Display mode selection
+
+### Author Filters (New)
+- Minimum authenticity threshold slider (0-100)
+- Maximum coordination threshold slider (0-100)
+- Author intent blocklist checkboxes:
+  - [ ] Block Bots
+  - [ ] Block Trolls
+  - [ ] Block State-sponsored
+  - [ ] Block Commercial/Spam
+  - [ ] Block Activist accounts
+
+### Display Settings
+- Display mode selection (Block/Overlay/Badge/Off)
+- Badge position (corner selection)
+
+### Data Management
 - Site whitelist management
 - API key configuration
 - Import/export settings
-- Data management (clear cache, reset)
+- Clear cache, reset to defaults
 
 ## Accessibility Considerations
 

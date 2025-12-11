@@ -5,18 +5,20 @@
 
 import { classifyContent, determineFilterAction } from '../lib/classifier.js';
 import { extractPageContent, shouldAnalyzePage, getCacheTTL } from '../lib/extractor.js';
+import { extractAuthor } from '../lib/author-extractor.js';
 import {
   getPreferences,
   getCachedClassification,
   cacheClassification,
   isWhitelisted
 } from '../lib/storage.js';
-import type { ClassificationResult, FilterAction } from '../types/index.js';
+import type { ClassificationResult, FilterAction, ExtractedAuthor } from '../types/index.js';
 import { applyDisplay, removeDisplay } from './display.js';
 
 // Store current classification for popup access
 let currentClassification: ClassificationResult | null = null;
 let currentFilterAction: FilterAction | null = null;
+let currentAuthor: ExtractedAuthor | null = null;
 
 /**
  * Main entry point
@@ -70,8 +72,14 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Extract author information
+  currentAuthor = extractAuthor(document, window.location.href);
+  if (currentAuthor) {
+    console.log('[Derigo] Extracted author:', currentAuthor.identifier, '(', currentAuthor.platform, ')');
+  }
+
   console.log('[Derigo] Analyzing content...');
-  const result = await classifyContent(content, window.location.href);
+  const result = await classifyContent(content, window.location.href, currentAuthor || undefined);
   currentClassification = result;
 
   // Cache the result
@@ -110,7 +118,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     case 'GET_CURRENT_CLASSIFICATION':
       sendResponse({
         classification: currentClassification,
-        filterAction: currentFilterAction
+        filterAction: currentFilterAction,
+        author: currentAuthor
       });
       break;
 
@@ -145,6 +154,7 @@ const observer = new MutationObserver(() => {
     // Reset and re-analyze
     currentClassification = null;
     currentFilterAction = null;
+    currentAuthor = null;
     removeDisplay();
     main();
   }

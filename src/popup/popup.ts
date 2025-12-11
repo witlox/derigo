@@ -4,8 +4,15 @@
  */
 
 import { getPreferences, setPreferences } from '../lib/storage.js';
-import { getTruthIndicator, formatAxisLabel } from '../lib/classifier.js';
-import type { ClassificationResult, UserPreferences } from '../types/index.js';
+import {
+  getTruthIndicator,
+  formatAxisLabel,
+  getAuthenticityColor,
+  getCoordinationColor,
+  getIntentIndicator
+} from '../lib/classifier.js';
+import { getAuthenticityLabel, getCoordinationLabel } from '../lib/author-classifier.js';
+import type { ClassificationResult, UserPreferences, AuthorClassification, ExtractedAuthor } from '../types/index.js';
 
 // DOM Elements
 const elements = {
@@ -13,7 +20,7 @@ const elements = {
   noAnalysis: document.getElementById('no-analysis') as HTMLElement,
   analysis: document.getElementById('analysis') as HTMLElement,
   status: document.getElementById('status') as HTMLElement,
-  radarPolygon: document.getElementById('radar-polygon') as SVGPolygonElement,
+  radarPolygon: document.getElementById('radar-polygon') as unknown as SVGPolygonElement,
   toggleEnabled: document.getElementById('toggle-enabled') as HTMLInputElement,
   displayMode: document.getElementById('display-mode') as HTMLSelectElement,
   openOptions: document.getElementById('open-options') as HTMLAnchorElement
@@ -48,6 +55,18 @@ const truthElements = {
 
 const confidenceValue = document.getElementById('confidence-value') as HTMLElement;
 
+// Author elements
+const authorElements = {
+  section: document.getElementById('author-section') as HTMLElement | null,
+  icon: document.getElementById('author-icon') as HTMLElement | null,
+  intent: document.getElementById('author-intent') as HTMLElement | null,
+  authenticityBar: document.getElementById('authenticity-fill') as HTMLElement | null,
+  authenticityValue: document.getElementById('authenticity-value') as HTMLElement | null,
+  coordinationBar: document.getElementById('coordination-fill') as HTMLElement | null,
+  coordinationValue: document.getElementById('coordination-value') as HTMLElement | null,
+  knownActor: document.getElementById('known-actor') as HTMLElement | null
+};
+
 /**
  * Initialize popup
  */
@@ -69,7 +88,7 @@ async function init(): Promise<void> {
       });
 
       if (response?.classification) {
-        showAnalysis(response.classification);
+        showAnalysis(response.classification, response.author);
       } else {
         showNoAnalysis();
       }
@@ -174,7 +193,7 @@ function showNoAnalysis(): void {
 /**
  * Show analysis results
  */
-function showAnalysis(result: ClassificationResult): void {
+function showAnalysis(result: ClassificationResult, extractedAuthor?: ExtractedAuthor): void {
   elements.loading.style.display = 'none';
   elements.noAnalysis.style.display = 'none';
   elements.analysis.style.display = 'block';
@@ -191,8 +210,73 @@ function showAnalysis(result: ClassificationResult): void {
   // Update truth score
   updateTruthScore(result.truthScore);
 
+  // Update author section
+  if (result.author) {
+    updateAuthorSection(result.author, extractedAuthor);
+  } else {
+    hideAuthorSection();
+  }
+
   // Update confidence
   confidenceValue.textContent = `${Math.round(result.confidence * 100)}%`;
+}
+
+/**
+ * Update author section with classification data
+ */
+function updateAuthorSection(author: AuthorClassification, extractedAuthor?: ExtractedAuthor): void {
+  if (!authorElements.section) return;
+
+  authorElements.section.style.display = 'block';
+
+  // Update intent icon and label
+  const intentInfo = getIntentIndicator(author.intent.primary);
+  if (authorElements.icon) {
+    authorElements.icon.textContent = intentInfo.icon;
+    authorElements.icon.style.background = intentInfo.color;
+  }
+  if (authorElements.intent) {
+    authorElements.intent.textContent = intentInfo.label;
+    if (extractedAuthor?.displayName || extractedAuthor?.identifier) {
+      authorElements.intent.textContent = `${extractedAuthor.displayName || extractedAuthor.identifier} - ${intentInfo.label}`;
+    }
+  }
+
+  // Update authenticity bar
+  if (authorElements.authenticityBar && authorElements.authenticityValue) {
+    authorElements.authenticityBar.style.width = `${author.authenticity}%`;
+    authorElements.authenticityBar.style.background = getAuthenticityColor(author.authenticity);
+    authorElements.authenticityValue.textContent = `${author.authenticity}% - ${getAuthenticityLabel(author.authenticity)}`;
+  }
+
+  // Update coordination bar
+  if (authorElements.coordinationBar && authorElements.coordinationValue) {
+    authorElements.coordinationBar.style.width = `${author.coordination}%`;
+    authorElements.coordinationBar.style.background = getCoordinationColor(author.coordination);
+    authorElements.coordinationValue.textContent = `${author.coordination}% - ${getCoordinationLabel(author.coordination)}`;
+  }
+
+  // Show known actor warning if applicable
+  if (authorElements.knownActor) {
+    if (author.knownActor) {
+      authorElements.knownActor.style.display = 'block';
+      authorElements.knownActor.innerHTML = `
+        <span class="known-actor-badge">Known Actor</span>
+        <span class="known-actor-source">${author.knownActor.source}</span>
+      `;
+    } else {
+      authorElements.knownActor.style.display = 'none';
+    }
+  }
+}
+
+/**
+ * Hide author section when no author data available
+ */
+function hideAuthorSection(): void {
+  if (authorElements.section) {
+    authorElements.section.style.display = 'none';
+  }
 }
 
 /**

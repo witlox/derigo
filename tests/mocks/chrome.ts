@@ -99,7 +99,9 @@ global.chrome = chromeMock;
 const mockIDBData: Record<string, Record<string, any>> = {
   classifications: {},
   sources: {},
-  keywords: {}
+  keywords: {},
+  authors: {},
+  knownActors: {}
 };
 
 class MockIDBObjectStore {
@@ -120,9 +122,47 @@ class MockIDBObjectStore {
   }
 
   put(value: any) {
-    const key = value.urlHash || value.domain || value.id;
+    const key = value.urlHash || value.domain || value.identifier || value.authorKey || value.id;
     this.data[key] = value;
     return { onsuccess: null as any, onerror: null as any };
+  }
+
+  delete(key: string) {
+    delete this.data[key];
+    return { onsuccess: null as any, onerror: null as any };
+  }
+
+  openCursor() {
+    const entries = Object.entries(this.data);
+    let index = 0;
+    const cursor = {
+      value: entries[0]?.[1],
+      continue: () => {
+        index++;
+        if (index < entries.length) {
+          cursor.value = entries[index][1];
+          if (cursorRequest.onsuccess) {
+            cursorRequest.onsuccess({ target: { result: cursor } } as any);
+          }
+        } else {
+          if (cursorRequest.onsuccess) {
+            cursorRequest.onsuccess({ target: { result: null } } as any);
+          }
+        }
+      }
+    };
+    const cursorRequest = {
+      result: entries.length > 0 ? cursor : null,
+      onsuccess: null as any,
+      onerror: null as any
+    };
+    // Simulate async
+    setTimeout(() => {
+      if (cursorRequest.onsuccess) {
+        cursorRequest.onsuccess({ target: { result: cursorRequest.result } } as any);
+      }
+    }, 0);
+    return cursorRequest;
   }
 
   getAll() {

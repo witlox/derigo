@@ -16,8 +16,9 @@ extension/
 ├── service-worker.js       # Background service worker
 ├── content/
 │   ├── content.js          # Main content script
-│   ├── analyzer.js         # Classification logic
-│   ├── display.js          # UI overlays and badges
+│   ├── analyzer.js         # Content classification logic
+│   ├── author-analyzer.js  # Author classification logic (new)
+│   ├── display.js          # UI overlays, badges, radar chart
 │   └── styles.css          # Injected styles
 ├── popup/
 │   ├── popup.html          # Popup UI
@@ -29,12 +30,15 @@ extension/
 │   └── options.css         # Settings styles
 ├── lib/
 │   ├── storage.js          # Storage abstraction
-│   ├── classifier.js       # Classification engine
+│   ├── classifier.js       # Content classification engine
+│   ├── author-classifier.js # Author classification engine (new)
+│   ├── author-extractor.js # Author extraction from DOM (new)
 │   ├── cache.js            # Caching layer
 │   └── api.js              # External API calls
 ├── data/
 │   ├── sources.json        # Source reputation data
-│   └── keywords.json       # Keyword weights
+│   ├── keywords.json       # Keyword weights
+│   └── known-actors.json   # Known bot/troll/state actors (new)
 └── icons/
     ├── icon16.png
     ├── icon48.png
@@ -231,14 +235,20 @@ The popup provides quick access to:
 
 ```javascript
 // Database: derigo_db
-// Version: 1
+// Version: 2 (updated for author classification)
 
 // Object Stores:
 const DB_SCHEMA = {
-  // Classification cache
+  // Classification cache (content + author combined)
   classifications: {
     keyPath: 'urlHash',
     indexes: ['timestamp', 'domain']
+  },
+
+  // Author cache (by identifier + platform)
+  authors: {
+    keyPath: 'authorKey',  // `${platform}:${identifier}`
+    indexes: ['timestamp', 'platform', 'intent']
   },
 
   // Source reputation
@@ -252,6 +262,12 @@ const DB_SCHEMA = {
     keyPath: 'id',
     autoIncrement: true,
     indexes: ['axis', 'term']
+  },
+
+  // Known actors (bot/troll/state-sponsored)
+  knownActors: {
+    keyPath: 'actorKey',  // `${platform}:${identifier}`
+    indexes: ['platform', 'category', 'source']
   }
 };
 ```
@@ -262,19 +278,30 @@ const DB_SCHEMA = {
 // chrome.storage.sync (synced across devices)
 const SYNC_SCHEMA = {
   preferences: {
+    // Content filters
     economicRange: null,      // [min, max] or null
     socialRange: null,
     authorityRange: null,
     globalismRange: null,
     minTruthScore: 50,
+
+    // Author filters (new)
+    minAuthenticity: 0,       // 0-100, filter below this
+    maxCoordination: 100,     // 0-100, filter above this
+    blockedIntents: [],       // ['bot', 'troll', 'stateSponsored', ...]
+
+    // Display settings
     displayMode: 'badge',
     enableEnhancedAnalysis: false
   },
 
   // User's API keys (if using their own)
   apiKeys: {
-    claude: null,
-    factCheck: null
+    openai: null,
+    anthropic: null,
+    google: null,
+    factCheck: null,
+    botSentinel: null         // New
   }
 };
 
@@ -282,6 +309,7 @@ const SYNC_SCHEMA = {
 const LOCAL_SCHEMA = {
   // Large caches that shouldn't sync
   recentClassifications: [],
+  recentAuthorLookups: [],    // New
 
   // Debug settings
   debugMode: false,
@@ -295,12 +323,30 @@ const LOCAL_SCHEMA = {
 // Message types between content script and service worker
 
 type Message =
-  | { type: 'CLASSIFY'; data: { url: string; content: string } }
+  | { type: 'CLASSIFY'; data: { url: string; content: string; author?: ExtractedAuthor } }
   | { type: 'GET_SETTINGS' }
-  | { type: 'CACHE_RESULT'; data: { url: string; result: ClassificationResult } }
-  | { type: 'CLASSIFICATION_RESULT'; data: ClassificationResult }
-  | { type: 'REQUEST_ENHANCED'; data: { url: string; content: string } }
-  | { type: 'SETTINGS_UPDATED'; data: UserPreferences };
+  | { type: 'CACHE_RESULT'; data: { url: string; result: FullClassificationResult } }
+  | { type: 'CLASSIFICATION_RESULT'; data: FullClassificationResult }
+  | { type: 'REQUEST_ENHANCED'; data: { url: string; content: string; author?: ExtractedAuthor } }
+  | { type: 'SETTINGS_UPDATED'; data: UserPreferences }
+  | { type: 'LOOKUP_AUTHOR'; data: { author: ExtractedAuthor } }          // New
+  | { type: 'AUTHOR_RESULT'; data: AuthorClassification }                  // New
+  | { type: 'CACHE_AUTHOR'; data: { author: ExtractedAuthor; result: AuthorClassification } }; // New
+
+// Extended classification result with author data
+interface FullClassificationResult {
+  content: {
+    economic: number;
+    social: number;
+    authority: number;
+    globalism: number;
+    truthScore: number;
+  };
+  author: AuthorClassification;
+  confidence: number;
+  source: 'local' | 'enhanced';
+  timestamp: number;
+}
 ```
 
 ## Build Configuration

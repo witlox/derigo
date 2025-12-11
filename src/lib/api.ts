@@ -6,7 +6,10 @@
 import type {
   AIClassificationResponse,
   ExternalAPISettings,
-  AIProvider
+  AIProvider,
+  ExtractedAuthor,
+  AuthorClassification,
+  AuthorIntent
 } from '../types/index.js';
 import { getExternalAPISettings, canMakeExternalCall } from './storage.js';
 
@@ -25,12 +28,13 @@ const DEFAULT_MODELS: Record<AIProvider, string> = {
 };
 
 /**
- * Request AI classification for content
+ * Request AI classification for content and author
  * Returns null if API is not enabled or fails
  */
 export async function requestAIClassification(
   content: string,
-  url: string
+  url: string,
+  author?: ExtractedAuthor
 ): Promise<AIClassificationResponse | null> {
   // Guard: check if enabled
   if (!await canMakeExternalCall('aiClassification')) {
@@ -40,7 +44,7 @@ export async function requestAIClassification(
   const settings = await getExternalAPISettings();
   const aiSettings = settings.aiClassification;
 
-  const prompt = buildClassificationPrompt(content, url);
+  const prompt = buildClassificationPrompt(content, url, author);
 
   try {
     const response = await callProvider(
@@ -58,33 +62,65 @@ export async function requestAIClassification(
 }
 
 /**
- * Build the classification prompt
+ * Build the classification prompt with optional author analysis
  */
-function buildClassificationPrompt(content: string, url: string): string {
+function buildClassificationPrompt(content: string, url: string, author?: ExtractedAuthor): string {
   // Truncate content to 2000 chars
   const truncated = content.length > 2000
     ? content.substring(0, 2000) + '...'
     : content;
 
-  return `Analyze this content for political alignment and factual accuracy.
+  // Build author context if available
+  let authorContext = '';
+  if (author) {
+    authorContext = `
+Author Information:
+- Identifier: ${author.identifier}
+- Platform: ${author.platform}
+${author.displayName ? `- Display Name: ${author.displayName}` : ''}
+${author.profileUrl ? `- Profile URL: ${author.profileUrl}` : ''}
+${Object.keys(author.metadata).length > 0 ? `- Metadata: ${JSON.stringify(author.metadata)}` : ''}
+`;
+  }
+
+  return `Analyze this content for political alignment, factual accuracy, and author authenticity.
 
 URL: ${url}
-
+${authorContext}
 Content:
 ${truncated}
 
 Respond with a JSON object containing:
 {
-  "economic": { "score": <-100 to +100, left to right>, "reasoning": "<brief explanation>" },
-  "social": { "score": <-100 to +100, progressive to conservative>, "reasoning": "<brief explanation>" },
-  "authority": { "score": <-100 to +100, libertarian to authoritarian>, "reasoning": "<brief explanation>" },
-  "globalism": { "score": <-100 to +100, nationalist to globalist>, "reasoning": "<brief explanation>" },
-  "truthfulness": { "score": <0 to 100>, "reasoning": "<brief explanation>" },
+  "content": {
+    "economic": { "score": <-100 to +100, left to right>, "reasoning": "<brief explanation>" },
+    "social": { "score": <-100 to +100, progressive to conservative>, "reasoning": "<brief explanation>" },
+    "authority": { "score": <-100 to +100, libertarian to authoritarian>, "reasoning": "<brief explanation>" },
+    "globalism": { "score": <-100 to +100, nationalist to globalist>, "reasoning": "<brief explanation>" },
+    "truthfulness": { "score": <0 to 100>, "reasoning": "<brief explanation>" }
+  },
+  "author": {
+    "authenticity": { "score": <0 to 100, bot-like to human>, "reasoning": "<brief explanation>" },
+    "coordination": { "score": <0 to 100, organic to orchestrated campaign>, "reasoning": "<brief explanation>" },
+    "intent": {
+      "primary": "<organic|troll|bot|stateSponsored|commercial|activist>",
+      "confidence": <0 to 1>,
+      "reasoning": "<brief explanation>"
+    }
+  },
   "confidence": <0 to 1>,
   "claims": [{ "claim": "<factual claim found>", "assessment": "<verified/unverified/false>" }]
 }
 
-Be objective and evidence-based. Only output valid JSON.`;
+Author intent categories:
+- organic: Genuine individual sharing their views
+- troll: Account primarily seeking to provoke or disrupt
+- bot: Automated account with non-human posting patterns
+- stateSponsored: Account linked to government influence operations
+- commercial: Account promoting products/services or paid content
+- activist: Organized advocacy account (not necessarily bad, but coordinated)
+
+Analyze the writing style, language patterns, emotional manipulation, and content signals to determine author authenticity and intent. Be objective and evidence-based. Only output valid JSON.`;
 }
 
 /**
@@ -203,6 +239,7 @@ async function callGoogle(apiKey: string, model: string, prompt: string): Promis
 
 /**
  * Parse AI response into structured format
+ * Handles both new (nested) and legacy (flat) response formats
  */
 function parseAIResponse(response: string): AIClassificationResponse | null {
   try {
@@ -214,45 +251,128 @@ function parseAIResponse(response: string): AIClassificationResponse | null {
 
     const parsed = JSON.parse(jsonMatch[0]);
 
-    // Validate structure
-    if (
-      typeof parsed.economic?.score !== 'number' ||
-      typeof parsed.social?.score !== 'number' ||
-      typeof parsed.authority?.score !== 'number' ||
-      typeof parsed.globalism?.score !== 'number' ||
-      typeof parsed.truthfulness?.score !== 'number'
-    ) {
-      throw new Error('Invalid response structure');
-    }
+    // Check if it's the new nested format or legacy flat format
+    const isNewFormat = parsed.content && typeof parsed.content === 'object';
 
-    return {
-      economic: {
-        score: clamp(parsed.economic.score, -100, 100),
-        reasoning: parsed.economic.reasoning || ''
-      },
-      social: {
-        score: clamp(parsed.social.score, -100, 100),
-        reasoning: parsed.social.reasoning || ''
-      },
-      authority: {
-        score: clamp(parsed.authority.score, -100, 100),
-        reasoning: parsed.authority.reasoning || ''
-      },
-      globalism: {
-        score: clamp(parsed.globalism.score, -100, 100),
-        reasoning: parsed.globalism.reasoning || ''
-      },
-      truthfulness: {
-        score: clamp(parsed.truthfulness.score, 0, 100),
-        reasoning: parsed.truthfulness.reasoning || ''
-      },
-      confidence: clamp(parsed.confidence || 0.5, 0, 1),
-      claims: parsed.claims || []
-    };
+    if (isNewFormat) {
+      // New format with nested content and author
+      const content = parsed.content;
+      const author = parsed.author;
+
+      // Validate content structure
+      if (
+        typeof content.economic?.score !== 'number' ||
+        typeof content.social?.score !== 'number' ||
+        typeof content.authority?.score !== 'number' ||
+        typeof content.globalism?.score !== 'number' ||
+        typeof content.truthfulness?.score !== 'number'
+      ) {
+        throw new Error('Invalid content response structure');
+      }
+
+      // Build response with author data if available
+      const result: AIClassificationResponse = {
+        content: {
+          economic: {
+            score: clamp(content.economic.score, -100, 100),
+            reasoning: content.economic.reasoning || ''
+          },
+          social: {
+            score: clamp(content.social.score, -100, 100),
+            reasoning: content.social.reasoning || ''
+          },
+          authority: {
+            score: clamp(content.authority.score, -100, 100),
+            reasoning: content.authority.reasoning || ''
+          },
+          globalism: {
+            score: clamp(content.globalism.score, -100, 100),
+            reasoning: content.globalism.reasoning || ''
+          },
+          truthfulness: {
+            score: clamp(content.truthfulness.score, 0, 100),
+            reasoning: content.truthfulness.reasoning || ''
+          }
+        },
+        author: {
+          authenticity: {
+            score: clamp(author?.authenticity?.score ?? 50, 0, 100),
+            reasoning: author?.authenticity?.reasoning || ''
+          },
+          coordination: {
+            score: clamp(author?.coordination?.score ?? 0, 0, 100),
+            reasoning: author?.coordination?.reasoning || ''
+          },
+          intent: {
+            primary: validateIntent(author?.intent?.primary) || 'organic',
+            confidence: clamp(author?.intent?.confidence ?? 0.5, 0, 1),
+            reasoning: author?.intent?.reasoning || ''
+          }
+        },
+        confidence: clamp(parsed.confidence || 0.5, 0, 1),
+        claims: parsed.claims || []
+      };
+
+      return result;
+    } else {
+      // Legacy flat format - convert to new format
+      if (
+        typeof parsed.economic?.score !== 'number' ||
+        typeof parsed.social?.score !== 'number' ||
+        typeof parsed.authority?.score !== 'number' ||
+        typeof parsed.globalism?.score !== 'number' ||
+        typeof parsed.truthfulness?.score !== 'number'
+      ) {
+        throw new Error('Invalid response structure');
+      }
+
+      return {
+        content: {
+          economic: {
+            score: clamp(parsed.economic.score, -100, 100),
+            reasoning: parsed.economic.reasoning || ''
+          },
+          social: {
+            score: clamp(parsed.social.score, -100, 100),
+            reasoning: parsed.social.reasoning || ''
+          },
+          authority: {
+            score: clamp(parsed.authority.score, -100, 100),
+            reasoning: parsed.authority.reasoning || ''
+          },
+          globalism: {
+            score: clamp(parsed.globalism.score, -100, 100),
+            reasoning: parsed.globalism.reasoning || ''
+          },
+          truthfulness: {
+            score: clamp(parsed.truthfulness.score, 0, 100),
+            reasoning: parsed.truthfulness.reasoning || ''
+          }
+        },
+        author: {
+          authenticity: { score: 50, reasoning: 'Not analyzed' },
+          coordination: { score: 0, reasoning: 'Not analyzed' },
+          intent: { primary: 'organic', confidence: 0, reasoning: 'Not analyzed' }
+        },
+        confidence: clamp(parsed.confidence || 0.5, 0, 1),
+        claims: parsed.claims || []
+      };
+    }
   } catch (error) {
     console.error('[Derigo] Failed to parse AI response:', error);
     return null;
   }
+}
+
+/**
+ * Validate author intent is a known type
+ */
+function validateIntent(intent: string | undefined): AuthorIntent | null {
+  const validIntents: AuthorIntent[] = ['organic', 'troll', 'bot', 'stateSponsored', 'commercial', 'activist'];
+  if (intent && validIntents.includes(intent as AuthorIntent)) {
+    return intent as AuthorIntent;
+  }
+  return null;
 }
 
 /**

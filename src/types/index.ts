@@ -1,4 +1,110 @@
-// Classification result from analyzing content
+// ============================================
+// Author Classification Types
+// ============================================
+
+// Author intent categories
+export type AuthorIntent = 'organic' | 'troll' | 'bot' | 'stateSponsored' | 'commercial' | 'activist';
+
+// Platform types for author extraction
+export type AuthorPlatform = 'twitter' | 'reddit' | 'facebook' | 'article' | 'comment' | 'unknown';
+
+// Extracted author information from page
+export interface ExtractedAuthor {
+  identifier: string;          // Username, byline, or unique ID
+  displayName?: string;
+  platform: AuthorPlatform;
+  profileUrl?: string;
+  metadata: Record<string, any>; // Platform-specific data (verified, accountAge, etc.)
+}
+
+// Author classification result
+export interface AuthorClassification {
+  authenticity: number;        // 0 (bot-like) to 100 (human)
+  coordination: number;        // 0 (organic) to 100 (orchestrated)
+  intent: {
+    primary: AuthorIntent;
+    confidence: number;        // 0-1 confidence in primary
+    breakdown: {
+      organic: number;
+      troll: number;
+      bot: number;
+      stateSponsored: number;
+      commercial: number;
+      activist: number;
+    };
+  };
+  authorId?: string;           // Extracted identifier
+  platform?: AuthorPlatform;
+  knownActor?: KnownActorEntry; // Match from database if found
+  signals: AuthorSignal[];     // Evidence used for classification
+  dataQuality: 'high' | 'medium' | 'low' | 'minimal';
+}
+
+// Signal used in author classification
+export interface AuthorSignal {
+  type: string;
+  value: number | string | boolean;
+  weight: number;
+  direction: 'authentic' | 'suspicious' | 'neutral';
+}
+
+// Known actor database entry
+export interface KnownActorEntry {
+  identifier: string;          // Username or pattern
+  platform: AuthorPlatform | 'all';
+  category: AuthorIntent;
+  confidence: number;          // 0-1
+  source: string;              // Attribution (e.g., "Stanford IO Report 2023")
+  addedDate: string;
+  attribution?: {
+    country?: string;          // e.g., "Russia", "China", "Iran"
+    campaign?: string;         // e.g., "Internet Research Agency"
+    organization?: string;
+  };
+}
+
+// Content-based signals for author analysis
+export interface ContentSignals {
+  repetitivePatterns: number;
+  templateLikelihood: number;
+  unnaturalPhrasing: number;
+  emotionalLanguageDensity: number;
+  personalAttacks: number;
+  badFaithArguments: number;
+  engagementBaiting: number;
+  promotionalLanguage: number;
+  affiliateLinkCount: number;
+  productMentions: number;
+  coordinatedNarratives: number;
+  whataboutismDensity: number;
+  personalVoice: number;
+  nuancedArguments: number;
+  originalContent: number;
+}
+
+// ============================================
+// Content Classification Types
+// ============================================
+
+// Content classification result (political alignment)
+export interface ContentClassification {
+  economic: number;      // -100 (left) to +100 (right)
+  social: number;        // -100 (progressive) to +100 (conservative)
+  authority: number;     // -100 (libertarian) to +100 (authoritarian)
+  globalism: number;     // -100 (nationalist) to +100 (globalist)
+  truthScore: number;    // 0 to 100
+}
+
+// Full classification result (content + author)
+export interface FullClassificationResult {
+  content: ContentClassification;
+  author: AuthorClassification;
+  confidence: number;    // 0 to 1
+  source: 'local' | 'enhanced';
+  timestamp: number;
+}
+
+// Legacy classification result (for backward compatibility)
 export interface ClassificationResult {
   economic: number;      // -100 (left) to +100 (right)
   social: number;        // -100 (progressive) to +100 (conservative)
@@ -8,11 +114,13 @@ export interface ClassificationResult {
   confidence: number;    // 0 to 1
   source: 'local' | 'enhanced';
   timestamp: number;
+  // New author fields (optional for backward compatibility)
+  author?: AuthorClassification;
 }
 
 // User preferences for filtering
 export interface UserPreferences {
-  // Political filters (null = no filter)
+  // Content filters (null = no filter)
   economicRange: [number, number] | null;
   socialRange: [number, number] | null;
   authorityRange: [number, number] | null;
@@ -20,6 +128,11 @@ export interface UserPreferences {
 
   // Truthfulness threshold (0-100, content below this triggers action)
   minTruthScore: number;
+
+  // Author filters (new)
+  minAuthenticity: number;           // 0-100, filter authors below this
+  maxCoordination: number;           // 0-100, filter authors above this
+  blockedIntents: AuthorIntent[];    // Block specific author types
 
   // Display behavior
   displayMode: 'block' | 'overlay' | 'badge' | 'off';
@@ -70,12 +183,26 @@ export interface AIClassificationSettings {
   requestsPerMinute?: number;
 }
 
+// Author database API settings
+export interface BotSentinelSettings {
+  enabled: boolean;
+  apiKey: string;
+  tier: 'free' | 'basic' | 'pro';
+}
+
+export interface AuthorDatabaseAPISettings {
+  enabled: boolean;
+  botSentinel: BotSentinelSettings;
+  usePublicLists: boolean;  // Use bundled known actors list
+}
+
 export interface ExternalAPISettings {
   allowExternalCalls: boolean;
   factCheck: FactCheckAPISettings;
   claimBuster: ClaimBusterAPISettings;
   newsGuard: NewsGuardAPISettings;
   aiClassification: AIClassificationSettings;
+  authorDatabase: AuthorDatabaseAPISettings;
 }
 
 // Keyword entry for scoring
@@ -113,26 +240,70 @@ export interface CacheEntry {
   ttl: number;
 }
 
+// Cache entry for author classification
+export interface AuthorCacheEntry {
+  authorKey: string;          // `${platform}:${identifier}`
+  classification: AuthorClassification;
+  timestamp: number;
+  ttl: number;
+  source: 'local' | 'external' | 'ai';
+}
+
 // Filter action result
+export type FilterReason =
+  | 'economic'
+  | 'social'
+  | 'authority'
+  | 'globalism'
+  | 'truthfulness'
+  | 'authenticity'      // Author below minimum
+  | 'coordination'      // Author above maximum
+  | 'authorIntent';     // Author intent in blocked list
+
 export interface FilterAction {
   action: 'none' | 'badge' | 'overlay' | 'block';
-  reason?: 'economic' | 'social' | 'authority' | 'globalism' | 'truthfulness';
+  reason?: FilterReason;
   result: ClassificationResult;
 }
 
 // Message types for communication
 export type MessageType =
-  | { type: 'CLASSIFY'; data: { url: string; content: string } }
+  | { type: 'CLASSIFY'; data: { url: string; content: string; author?: ExtractedAuthor } }
   | { type: 'GET_SETTINGS' }
   | { type: 'SETTINGS_UPDATED'; data: UserPreferences }
   | { type: 'CACHE_RESULT'; data: { url: string; result: ClassificationResult } }
   | { type: 'CLASSIFICATION_RESULT'; data: ClassificationResult }
-  | { type: 'REQUEST_ENHANCED'; data: { url: string; content: string } }
+  | { type: 'REQUEST_ENHANCED'; data: { url: string; content: string; author?: ExtractedAuthor } }
   | { type: 'GET_CURRENT_CLASSIFICATION' }
-  | { type: 'WHITELIST_DOMAIN'; data: { domain: string } };
+  | { type: 'WHITELIST_DOMAIN'; data: { domain: string } }
+  | { type: 'LOOKUP_AUTHOR'; data: { author: ExtractedAuthor } }
+  | { type: 'AUTHOR_RESULT'; data: AuthorClassification }
+  | { type: 'CACHE_AUTHOR'; data: { author: ExtractedAuthor; result: AuthorClassification } };
 
 // API response types
 export interface AIClassificationResponse {
+  content: {
+    economic: { score: number; reasoning: string };
+    social: { score: number; reasoning: string };
+    authority: { score: number; reasoning: string };
+    globalism: { score: number; reasoning: string };
+    truthfulness: { score: number; reasoning: string };
+  };
+  author: {
+    authenticity: { score: number; reasoning: string };
+    coordination: { score: number; reasoning: string };
+    intent: {
+      primary: AuthorIntent;
+      confidence: number;
+      reasoning: string;
+    };
+  };
+  confidence: number;
+  claims: Array<{ claim: string; assessment: string }>;
+}
+
+// Legacy API response (for backward compatibility)
+export interface LegacyAIClassificationResponse {
   economic: { score: number; reasoning: string };
   social: { score: number; reasoning: string };
   authority: { score: number; reasoning: string };

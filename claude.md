@@ -1,8 +1,13 @@
-# Derigo - Political Content Classification Browser Extension
+# Derigo - Political Content & Author Classification Browser Extension
 
 ## Project Overview
 
-Derigo is a browser extension (Chrome/Brave, with future Safari/iOS support) that analyzes web content for political alignment and truthfulness. Users can filter or block content based on their preferences, with configurable display options ranging from visual indicators to full blocking.
+Derigo is a browser extension (Chrome/Brave, with future Safari/iOS support) that performs dual analysis of web content:
+
+1. **Content Classification**: Analyzes the political alignment and truthfulness of the content itself
+2. **Author Classification**: Analyzes the authenticity and intent of content creators (detecting bots, trolls, state-sponsored actors, etc.)
+
+Users can filter or block content based on either dimension, with results displayed in an integrated 7-axis radar chart visualization.
 
 **Target Platforms (Priority Order):**
 1. Chrome/Brave (Manifest V3) - Primary focus
@@ -34,9 +39,9 @@ derigo/
 
 ### Classification System
 
-#### Political Alignment (Multi-dimensional)
+#### Content Classification: Political Alignment (Multi-dimensional)
 
-The system uses multiple axes for nuanced classification:
+The system uses multiple axes for nuanced content classification:
 
 1. **Economic Axis**: Left (collectivist) ↔ Right (free market)
 2. **Social Axis**: Progressive ↔ Conservative
@@ -44,6 +49,26 @@ The system uses multiple axes for nuanced classification:
 4. **Globalism Axis**: Nationalist ↔ Globalist
 
 Each piece of content receives scores on each axis (-100 to +100), allowing users to filter based on any combination.
+
+#### Author Classification (New)
+
+Analyzes the content creator across three dimensions:
+
+5. **Authenticity Axis** (0-100): Bot ↔ Human
+   - Detects automated/bot accounts vs genuine human authors
+   - Uses posting patterns, content originality, account age
+
+6. **Coordination Axis** (0-100): Organic ↔ Orchestrated
+   - Independent content vs coordinated campaigns
+   - Identifies coordinated inauthentic behavior
+
+7. **Intent Classification** (Categorical):
+   - **Organic**: Genuine personal/organizational expression
+   - **Troll**: Provocative, disruptive intent
+   - **Bot**: Automated spam/amplification
+   - **State-sponsored**: Government-affiliated disinformation
+   - **Commercial**: Marketing/promotional content
+   - **Activist**: Organized advocacy campaigns
 
 #### Truthfulness Scoring
 
@@ -67,16 +92,20 @@ For speed and minimal footprint:
    - Keyword-based scoring with weighted terms
    - Domain/source reputation lookup (cached)
    - Pattern matching for known content types
+   - Author heuristic analysis (posting patterns, content signals)
+   - Known actor database lookup (bundled)
    - Target: <50ms classification time
 
 2. **Enhanced Path (Optional API)**:
-   - AI analysis via Claude API for nuanced content
+   - AI analysis via OpenAI/Anthropic/Google for nuanced content and author assessment
    - Fact-check API queries for specific claims
+   - External author database lookups (Bot Sentinel, etc.)
    - Only triggered for uncertain classifications or user request
    - Results cached to minimize API calls
 
 3. **Caching Strategy**:
    - IndexedDB for classification results (keyed by URL hash)
+   - Author cache by identifier (keyed by username/platform)
    - Source reputation cached for 24 hours
    - User settings synced via Chrome Storage API
 
@@ -104,7 +133,7 @@ For speed and minimal footprint:
 
 ```typescript
 interface UserPreferences {
-  // Political filters (null = no filter)
+  // Content filters (null = no filter)
   economicRange: [number, number] | null;  // [-100, 100]
   socialRange: [number, number] | null;
   authorityRange: [number, number] | null;
@@ -113,6 +142,11 @@ interface UserPreferences {
   // Truthfulness threshold
   minTruthScore: number;  // 0-100, content below this triggers action
 
+  // Author filters (new)
+  minAuthenticity: number;        // 0-100, filter authors below this
+  maxCoordination: number;        // 0-100, filter authors above this
+  blockedIntents: AuthorIntent[]; // Block specific author types
+
   // Display behavior
   displayMode: 'block' | 'overlay' | 'badge' | 'off';
 
@@ -120,6 +154,8 @@ interface UserPreferences {
   enableEnhancedAnalysis: boolean;
   cacheRetentionDays: number;
 }
+
+type AuthorIntent = 'organic' | 'troll' | 'bot' | 'stateSponsored' | 'commercial' | 'activist';
 ```
 
 ### Display Modes
@@ -128,6 +164,15 @@ interface UserPreferences {
 2. **Overlay**: Dismissible warning overlay (proceed button)
 3. **Badge**: Color-coded indicator in corner, no blocking
 4. **Off**: Classification only, no visual changes
+
+### Visualization
+
+All classification results are displayed in a **7-axis radar chart**:
+- Economic, Social, Authority, Globalism (content axes)
+- Authenticity, Coordination (author axes, inverted for display)
+- Truthfulness (quality axis)
+
+Author intent is shown as a categorical badge with confidence indicator.
 
 ## Development Guidelines
 
@@ -162,7 +207,9 @@ npm run package    # Create distributable .zip
 
 ## API Integrations
 
-### Fact-Check APIs (Future)
+**IMPORTANT**: All external API integrations are DISABLED by default.
+
+### Fact-Check APIs (Optional)
 
 - **Google Fact Check Tools API**: Free, requires API key
 - **ClaimBuster**: Academic API for claim detection
@@ -170,9 +217,15 @@ npm run package    # Create distributable .zip
 
 ### AI Classification (Optional)
 
-- Claude API for complex content analysis
+- OpenAI, Anthropic, or Google AI for complex content/author analysis
 - Rate-limited and cached aggressively
-- User opt-in required (API key or service subscription)
+- User opt-in required (API key)
+
+### Author Database APIs (Optional, New)
+
+- **Bot Sentinel**: Bot/troll account detection
+- **Hamilton 68 / ASD**: State-sponsored actor tracking
+- **Bundled database**: Known actors list ships with extension (no API needed)
 
 ## Security Considerations
 

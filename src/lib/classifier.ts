@@ -3,9 +3,13 @@ import type {
   KeywordEntry,
   SourceEntry,
   FilterAction,
-  UserPreferences
+  UserPreferences,
+  ExtractedAuthor,
+  AuthorClassification,
+  FilterReason
 } from '../types/index.js';
-import { getKeywords, getSourceReputation } from './storage.js';
+import { getKeywords, getSourceReputation, getCachedAuthor, cacheAuthor } from './storage.js';
+import { classifyAuthor, getDefaultAuthorClassification } from './author-classifier.js';
 
 // In-memory cache for keywords (loaded once)
 let keywordsCache: KeywordEntry[] | null = null;
@@ -201,10 +205,12 @@ function calculateConfidence(
 
 /**
  * Main classification function
+ * Classifies content and optionally author
  */
 export async function classifyContent(
   text: string,
-  url: string
+  url: string,
+  author?: ExtractedAuthor
 ): Promise<ClassificationResult> {
   const normalizedText = normalizeText(text);
   const keywords = await loadKeywords();
@@ -257,6 +263,12 @@ export async function classifyContent(
     text.length
   );
 
+  // Author classification (if author provided)
+  let authorClassification: AuthorClassification | undefined;
+  if (author) {
+    authorClassification = await classifyAuthorWithCache(author, text);
+  }
+
   return {
     economic: economicScore,
     social: socialScore,
@@ -265,8 +277,31 @@ export async function classifyContent(
     truthScore,
     confidence,
     source: 'local',
-    timestamp: Date.now()
+    timestamp: Date.now(),
+    author: authorClassification
   };
+}
+
+/**
+ * Classify author with caching
+ */
+async function classifyAuthorWithCache(
+  author: ExtractedAuthor,
+  content: string
+): Promise<AuthorClassification> {
+  // Check cache first
+  const cached = await getCachedAuthor(author);
+  if (cached) {
+    return cached.classification;
+  }
+
+  // Classify author
+  const classification = await classifyAuthor(author, content);
+
+  // Cache the result
+  await cacheAuthor(author, classification, 'local');
+
+  return classification;
 }
 
 /**
@@ -321,6 +356,27 @@ export function determineFilterAction(
     return { action, reason: 'truthfulness', result };
   }
 
+  // Check author filters (if author classification exists)
+  if (result.author) {
+    // Check authenticity (filter if below minimum)
+    if (result.author.authenticity < prefs.minAuthenticity) {
+      return { action, reason: 'authenticity', result };
+    }
+
+    // Check coordination (filter if above maximum)
+    if (result.author.coordination > prefs.maxCoordination) {
+      return { action, reason: 'coordination', result };
+    }
+
+    // Check blocked intents
+    if (prefs.blockedIntents.length > 0) {
+      const primaryIntent = result.author.intent.primary;
+      if (prefs.blockedIntents.includes(primaryIntent)) {
+        return { action, reason: 'authorIntent', result };
+      }
+    }
+  }
+
   // No filter triggered, but still show badge if enabled
   if (prefs.displayMode === 'badge') {
     return { action: 'badge', result };
@@ -368,4 +424,62 @@ export function formatAxisLabel(axis: string, score: number): string {
   if (score < -33) return low;
   if (score > 33) return high;
   return 'Center';
+}
+
+/**
+ * Get author authenticity color for UI
+ */
+export function getAuthenticityColor(score: number): string {
+  // Score is 0 (bot-like) to 100 (human)
+  if (score >= 80) return '#22c55e'; // Green - highly authentic
+  if (score >= 60) return '#84cc16'; // Light green - likely authentic
+  if (score >= 40) return '#eab308'; // Yellow - uncertain
+  if (score >= 20) return '#f97316'; // Orange - suspicious
+  return '#ef4444'; // Red - likely bot/fake
+}
+
+/**
+ * Get author coordination color for UI
+ */
+export function getCoordinationColor(score: number): string {
+  // Score is 0 (organic) to 100 (orchestrated)
+  if (score <= 20) return '#22c55e'; // Green - organic
+  if (score <= 40) return '#84cc16'; // Light green - likely organic
+  if (score <= 60) return '#eab308'; // Yellow - some coordination
+  if (score <= 80) return '#f97316'; // Orange - likely coordinated
+  return '#ef4444'; // Red - orchestrated campaign
+}
+
+/**
+ * Get intent icon and label for UI
+ */
+export function getIntentIndicator(intent: string): { icon: string; label: string; color: string } {
+  const indicators: Record<string, { icon: string; label: string; color: string }> = {
+    organic: { icon: '👤', label: 'Organic User', color: '#22c55e' },
+    troll: { icon: '🧌', label: 'Troll Account', color: '#f97316' },
+    bot: { icon: '🤖', label: 'Bot Account', color: '#ef4444' },
+    stateSponsored: { icon: '🏛️', label: 'State-Sponsored', color: '#dc2626' },
+    commercial: { icon: '💰', label: 'Commercial', color: '#eab308' },
+    activist: { icon: '📢', label: 'Activist', color: '#8b5cf6' }
+  };
+
+  return indicators[intent] || { icon: '?', label: 'Unknown', color: '#9ca3af' };
+}
+
+/**
+ * Format filter reason for display
+ */
+export function formatFilterReason(reason: FilterReason): string {
+  const reasons: Record<FilterReason, string> = {
+    economic: 'Economic bias outside your range',
+    social: 'Social bias outside your range',
+    authority: 'Authority bias outside your range',
+    globalism: 'Globalism bias outside your range',
+    truthfulness: 'Below truthfulness threshold',
+    authenticity: 'Author authenticity below minimum',
+    coordination: 'Author coordination above maximum',
+    authorIntent: 'Author intent type is blocked'
+  };
+
+  return reasons[reason] || 'Content filtered';
 }
