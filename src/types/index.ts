@@ -131,7 +131,7 @@ export interface FullClassificationResult {
   timestamp: number;
 }
 
-// Legacy classification result (for backward compatibility)
+// Classification result
 export interface ClassificationResult {
   economic: number;      // -100 (left) to +100 (right)
   social: number;        // -100 (progressive) to +100 (conservative)
@@ -139,10 +139,45 @@ export interface ClassificationResult {
   globalism: number;     // -100 (nationalist) to +100 (globalist)
   truthScore: number;    // 0 to 100
   confidence: number;    // 0 to 1
-  source: 'local' | 'enhanced';
+  source: string;        // 'local' or 'local+ai+factCheck' etc.
   timestamp: number;
-  // New author fields (optional for backward compatibility)
+  // Author classification (optional)
   author?: AuthorClassification;
+  // Enhanced analysis data (when external APIs are used)
+  enhancedData?: EnhancedAnalysisData;
+}
+
+// Data from enhanced analysis (external APIs)
+export interface EnhancedAnalysisData {
+  aiAnalysis?: {
+    reasoning: {
+      economic: string;
+      social: string;
+      authority: string;
+      globalism: string;
+      truthfulness: string;
+    };
+    claims: Array<{
+      claim: string;
+      assessment: string;
+    }>;
+  };
+  factChecks?: Array<{
+    query: string;
+    results: Array<{
+      text: string;
+      reviews: Array<{
+        publisher: string;
+        rating: string;
+        url: string;
+      }>;
+    }>;
+  }>;
+  botSentinel?: {
+    rating: number;
+    category: 'normal' | 'satisfactory' | 'alarming' | 'problematic';
+    isTrollBot: boolean;
+  };
 }
 
 // User preferences for filtering
@@ -166,6 +201,9 @@ export interface UserPreferences {
 
   // Extension enabled
   enabled: boolean;
+
+  // Enhanced analysis (external APIs)
+  enableEnhancedAnalysis: boolean;
 
   // Site profiles for per-domain customization
   siteProfiles: SiteProfile[];

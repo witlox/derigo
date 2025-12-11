@@ -21,6 +21,7 @@ function createBasePrefs(): UserPreferences {
     minAuthenticity: 0,
     maxCoordination: 100,
     blockedIntents: [],
+    enableEnhancedAnalysis: false,
     siteProfiles: []
   };
 }

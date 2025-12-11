@@ -10,8 +10,9 @@ import type {
   SiteProfile,
   DisplayMode
 } from '../types/index.js';
-import { getKeywords, getSourceReputation, getCachedAuthor, cacheAuthor, getProfileForDomain } from './storage.js';
+import { getKeywords, getSourceReputation, getCachedAuthor, cacheAuthor, getProfileForDomain, getPreferences } from './storage.js';
 import { classifyAuthor } from './author-classifier.js';
+import { enhancedClassification } from './api.js';
 
 // In-memory cache for keywords (loaded once)
 let keywordsCache: KeywordEntry[] | null = null;
@@ -304,6 +305,110 @@ async function classifyAuthorWithCache(
   await cacheAuthor(author, classification, 'local');
 
   return classification;
+}
+
+/**
+ * Classify content with optional enhanced analysis using external APIs
+ * This is the main entry point when enhanced analysis is enabled
+ */
+export async function classifyContentWithEnhancement(
+  text: string,
+  url: string,
+  author?: ExtractedAuthor
+): Promise<ClassificationResult> {
+  // Always run local classification first (fast path)
+  const localResult = await classifyContent(text, url, author);
+
+  // Check if enhanced analysis is enabled
+  const prefs = await getPreferences();
+  if (!prefs.enableEnhancedAnalysis) {
+    return localResult;
+  }
+
+  // Run enhanced classification (external APIs)
+  try {
+    const enhanced = await enhancedClassification(
+      text,
+      url,
+      author,
+      {
+        economic: localResult.economic,
+        social: localResult.social,
+        authority: localResult.authority,
+        globalism: localResult.globalism,
+        truthfulness: localResult.truthScore,
+        authorAuthenticity: localResult.author?.authenticity,
+        authorCoordination: localResult.author?.coordination,
+        authorIntent: localResult.author?.intent.primary
+      }
+    );
+
+    // If we have combined results, update the classification
+    if (enhanced.combined) {
+      const combined = enhanced.combined;
+
+      // Update scores with combined values
+      localResult.economic = Math.round(combined.economic);
+      localResult.social = Math.round(combined.social);
+      localResult.authority = Math.round(combined.authority);
+      localResult.globalism = Math.round(combined.globalism);
+      localResult.truthScore = Math.round(combined.truthfulness);
+      localResult.confidence = combined.confidence;
+      localResult.source = combined.sources.join('+');
+
+      // Update author scores if available
+      if (localResult.author && (combined.authorAuthenticity !== undefined || combined.authorCoordination !== undefined)) {
+        if (combined.authorAuthenticity !== undefined) {
+          localResult.author.authenticity = Math.round(combined.authorAuthenticity);
+        }
+        if (combined.authorCoordination !== undefined) {
+          localResult.author.coordination = Math.round(combined.authorCoordination);
+        }
+
+        // Update data quality based on sources
+        if (combined.sources.includes('botSentinel') || combined.sources.includes('ai')) {
+          localResult.author.dataQuality = 'high';
+        } else if (combined.sources.length > 1) {
+          localResult.author.dataQuality = 'medium';
+        }
+      }
+
+      // Store enhanced data for UI display
+      localResult.enhancedData = {
+        aiAnalysis: enhanced.aiAnalysis ? {
+          reasoning: {
+            economic: enhanced.aiAnalysis.content.economic.reasoning,
+            social: enhanced.aiAnalysis.content.social.reasoning,
+            authority: enhanced.aiAnalysis.content.authority.reasoning,
+            globalism: enhanced.aiAnalysis.content.globalism.reasoning,
+            truthfulness: enhanced.aiAnalysis.content.truthfulness.reasoning
+          },
+          claims: enhanced.aiAnalysis.claims
+        } : undefined,
+        factChecks: enhanced.factChecks.length > 0 ? enhanced.factChecks.map(fc => ({
+          query: fc.query,
+          results: fc.result.claims?.map(c => ({
+            text: c.text,
+            reviews: c.claimReview.map(r => ({
+              publisher: r.publisher.name,
+              rating: r.textualRating,
+              url: r.url
+            }))
+          })) || []
+        })) : undefined,
+        botSentinel: enhanced.botSentinel ? {
+          rating: enhanced.botSentinel.rating,
+          category: enhanced.botSentinel.category,
+          isTrollBot: enhanced.botSentinel.isTrollBot
+        } : undefined
+      };
+    }
+  } catch (error) {
+    console.error('[Derigo] Enhanced classification failed:', error);
+    // Fall back to local result
+  }
+
+  return localResult;
 }
 
 /**

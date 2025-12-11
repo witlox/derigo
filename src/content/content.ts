@@ -3,7 +3,7 @@
  * Runs on every page to analyze and classify content
  */
 
-import { classifyContent, determineFilterAction, getEffectivePreferences } from '../lib/classifier.js';
+import { classifyContentWithEnhancement, determineFilterAction, getEffectivePreferences } from '../lib/classifier.js';
 import { extractPageContent, shouldAnalyzePage, getCacheTTL } from '../lib/extractor.js';
 import { extractAuthor } from '../lib/author-extractor.js';
 import {
@@ -86,7 +86,8 @@ async function main(): Promise<void> {
   }
 
   console.log('[Derigo] Analyzing content...');
-  const result = await classifyContent(content, window.location.href, currentAuthor || undefined);
+  // Use enhanced classification (with external APIs) if enabled, otherwise fast local path
+  const result = await classifyContentWithEnhancement(content, window.location.href, currentAuthor || undefined);
   currentClassification = result;
 
   // Cache the result

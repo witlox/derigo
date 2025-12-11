@@ -241,6 +241,7 @@ describe('Filter Action Determination', () => {
     blockedIntents: [],
     displayMode: 'badge',
     enabled: true,
+    enableEnhancedAnalysis: false,
     siteProfiles: [],
     ...overrides
   });

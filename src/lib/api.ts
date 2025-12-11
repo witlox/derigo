@@ -424,3 +424,338 @@ interface FactCheckResult {
     }>;
   }>;
 }
+
+export type { FactCheckResult };
+
+/**
+ * Bot Sentinel API integration
+ * https://botsentinel.com/api
+ */
+export async function queryBotSentinel(
+  username: string,
+  platform: string = 'twitter'
+): Promise<BotSentinelResult | null> {
+  if (!await canMakeExternalCall('botSentinel')) {
+    return null;
+  }
+
+  // Bot Sentinel only supports Twitter/X currently
+  if (platform !== 'twitter') {
+    return null;
+  }
+
+  const settings = await getExternalAPISettings();
+  const apiKey = settings.authorDatabase?.botSentinel?.apiKey;
+
+  if (!apiKey) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(`https://api.botsentinel.com/v1/account/${username}`, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        // Account not in database
+        return null;
+      }
+      throw new Error(`Bot Sentinel API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return parseBotSentinelResponse(data);
+  } catch (error) {
+    console.error('[Derigo] Bot Sentinel error:', error);
+    return null;
+  }
+}
+
+/**
+ * Parse Bot Sentinel response
+ */
+function parseBotSentinelResponse(data: BotSentinelAPIResponse): BotSentinelResult {
+  // Bot Sentinel uses a 0-100 scale where higher = more problematic
+  // Categories: Normal, Satisfactory, Alarming, Problematic
+  const rating = data.rating || 0;
+
+  let category: 'normal' | 'satisfactory' | 'alarming' | 'problematic' = 'normal';
+  if (rating >= 75) {
+    category = 'problematic';
+  } else if (rating >= 50) {
+    category = 'alarming';
+  } else if (rating >= 25) {
+    category = 'satisfactory';
+  }
+
+  return {
+    username: data.screen_name || data.username || 'unknown',
+    rating,
+    category,
+    isTrollBot: rating >= 50,
+    analysisDate: data.last_analyzed || new Date().toISOString(),
+    details: {
+      accountAge: data.account_age_days,
+      followerCount: data.followers_count,
+      followingCount: data.following_count,
+      tweetCount: data.statuses_count
+    }
+  };
+}
+
+// Bot Sentinel types
+interface BotSentinelAPIResponse {
+  screen_name?: string;
+  username?: string;
+  rating?: number;
+  last_analyzed?: string;
+  account_age_days?: number;
+  followers_count?: number;
+  following_count?: number;
+  statuses_count?: number;
+}
+
+export interface BotSentinelResult {
+  username: string;
+  rating: number;
+  category: 'normal' | 'satisfactory' | 'alarming' | 'problematic';
+  isTrollBot: boolean;
+  analysisDate: string;
+  details: {
+    accountAge?: number;
+    followerCount?: number;
+    followingCount?: number;
+    tweetCount?: number;
+  };
+}
+
+/**
+ * Enhanced classification that combines local + external APIs
+ * Called when user has enabled enhanced analysis
+ */
+export async function enhancedClassification(
+  content: string,
+  url: string,
+  author?: ExtractedAuthor,
+  localResult?: {
+    economic: number;
+    social: number;
+    authority: number;
+    globalism: number;
+    truthfulness: number;
+    authorAuthenticity?: number;
+    authorCoordination?: number;
+    authorIntent?: AuthorIntent;
+  }
+): Promise<EnhancedClassificationResult> {
+  const result: EnhancedClassificationResult = {
+    aiAnalysis: null,
+    factChecks: [],
+    botSentinel: null,
+    combined: null
+  };
+
+  // Run external API calls in parallel
+  const promises: Promise<void>[] = [];
+
+  // AI Classification
+  promises.push(
+    requestAIClassification(content, url, author).then(ai => {
+      result.aiAnalysis = ai;
+    })
+  );
+
+  // Bot Sentinel (if author on Twitter/X)
+  if (author && author.platform === 'twitter') {
+    promises.push(
+      queryBotSentinel(author.identifier, author.platform).then(bs => {
+        result.botSentinel = bs;
+      })
+    );
+  }
+
+  // Fact Check for claims (extract potential claims from content)
+  const potentialClaims = extractClaims(content);
+  if (potentialClaims.length > 0) {
+    // Only check first 3 claims to avoid rate limiting
+    const claimPromises = potentialClaims.slice(0, 3).map(claim =>
+      queryFactCheck(claim).then(fc => {
+        if (fc?.claims && fc.claims.length > 0) {
+          result.factChecks.push({ query: claim, result: fc });
+        }
+      })
+    );
+    promises.push(...claimPromises);
+  }
+
+  // Wait for all APIs
+  await Promise.allSettled(promises);
+
+  // Combine results if we have local + AI
+  if (localResult && result.aiAnalysis) {
+    result.combined = combineResults(localResult, result);
+  }
+
+  return result;
+}
+
+/**
+ * Extract potential factual claims from content
+ */
+function extractClaims(content: string): string[] {
+  const claims: string[] = [];
+  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 20);
+
+  // Look for claim indicators
+  const claimPatterns = [
+    /\b(study shows?|research (shows?|proves?|indicates?))\b/i,
+    /\b(according to|statistics show|data shows?)\b/i,
+    /\b(experts? (say|claim|believe)|scientists? (say|found))\b/i,
+    /\b(it('s| is) (true|false|a fact) that)\b/i,
+    /\b\d+%\s+(of|increase|decrease)/i,
+    /\b(never|always|every|all|none)\b.*\b(are|is|have|do)\b/i
+  ];
+
+  for (const sentence of sentences) {
+    for (const pattern of claimPatterns) {
+      if (pattern.test(sentence)) {
+        claims.push(sentence.trim());
+        break;
+      }
+    }
+  }
+
+  return claims;
+}
+
+/**
+ * Combine local and external API results
+ */
+function combineResults(
+  local: {
+    economic: number;
+    social: number;
+    authority: number;
+    globalism: number;
+    truthfulness: number;
+    authorAuthenticity?: number;
+    authorCoordination?: number;
+    authorIntent?: AuthorIntent;
+  },
+  external: EnhancedClassificationResult
+): CombinedScores {
+  const ai = external.aiAnalysis;
+  const bs = external.botSentinel;
+
+  // Weight: 60% local, 40% AI (when available)
+  const localWeight = 0.6;
+  const aiWeight = ai ? 0.4 : 0;
+  const totalWeight = localWeight + aiWeight;
+
+  const combined: CombinedScores = {
+    economic: (local.economic * localWeight + (ai?.content.economic.score || 0) * aiWeight) / totalWeight,
+    social: (local.social * localWeight + (ai?.content.social.score || 0) * aiWeight) / totalWeight,
+    authority: (local.authority * localWeight + (ai?.content.authority.score || 0) * aiWeight) / totalWeight,
+    globalism: (local.globalism * localWeight + (ai?.content.globalism.score || 0) * aiWeight) / totalWeight,
+    truthfulness: (local.truthfulness * localWeight + (ai?.content.truthfulness.score || 0) * aiWeight) / totalWeight,
+    confidence: ai?.confidence || 0.5,
+    sources: ['local']
+  };
+
+  if (ai) {
+    combined.sources.push('ai');
+  }
+
+  // Author scores - combine local, AI, and Bot Sentinel
+  if (local.authorAuthenticity !== undefined || ai?.author || bs) {
+    let authTotal = 0;
+    let authWeight = 0;
+
+    if (local.authorAuthenticity !== undefined) {
+      authTotal += local.authorAuthenticity * 0.4;
+      authWeight += 0.4;
+    }
+    if (ai?.author.authenticity) {
+      authTotal += ai.author.authenticity.score * 0.3;
+      authWeight += 0.3;
+    }
+    if (bs) {
+      // Bot Sentinel rating is inverted (higher = more problematic)
+      authTotal += (100 - bs.rating) * 0.3;
+      authWeight += 0.3;
+      combined.sources.push('botSentinel');
+    }
+
+    combined.authorAuthenticity = authWeight > 0 ? authTotal / authWeight : undefined;
+  }
+
+  if (local.authorCoordination !== undefined || ai?.author) {
+    let coordTotal = 0;
+    let coordWeight = 0;
+
+    if (local.authorCoordination !== undefined) {
+      coordTotal += local.authorCoordination * 0.5;
+      coordWeight += 0.5;
+    }
+    if (ai?.author.coordination) {
+      coordTotal += ai.author.coordination.score * 0.5;
+      coordWeight += 0.5;
+    }
+
+    combined.authorCoordination = coordWeight > 0 ? coordTotal / coordWeight : undefined;
+  }
+
+  // Adjust truthfulness based on fact checks
+  if (external.factChecks.length > 0) {
+    let falseCount = 0;
+    let verifiedCount = 0;
+
+    for (const fc of external.factChecks) {
+      for (const claim of fc.result.claims || []) {
+        for (const review of claim.claimReview || []) {
+          const rating = review.textualRating.toLowerCase();
+          if (rating.includes('false') || rating.includes('pants on fire') || rating.includes('incorrect')) {
+            falseCount++;
+          } else if (rating.includes('true') || rating.includes('correct') || rating.includes('verified')) {
+            verifiedCount++;
+          }
+        }
+      }
+    }
+
+    // Adjust truthfulness based on fact checks
+    if (falseCount > 0) {
+      combined.truthfulness = Math.max(0, combined.truthfulness - (falseCount * 15));
+      combined.sources.push('factCheck');
+    } else if (verifiedCount > 0) {
+      combined.truthfulness = Math.min(100, combined.truthfulness + (verifiedCount * 5));
+      combined.sources.push('factCheck');
+    }
+  }
+
+  return combined;
+}
+
+// Types for enhanced classification
+export interface EnhancedClassificationResult {
+  aiAnalysis: AIClassificationResponse | null;
+  factChecks: Array<{ query: string; result: FactCheckResult }>;
+  botSentinel: BotSentinelResult | null;
+  combined: CombinedScores | null;
+}
+
+export interface CombinedScores {
+  economic: number;
+  social: number;
+  authority: number;
+  globalism: number;
+  truthfulness: number;
+  authorAuthenticity?: number;
+  authorCoordination?: number;
+  confidence: number;
+  sources: string[];
+}

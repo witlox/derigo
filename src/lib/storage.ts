@@ -30,6 +30,8 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   // Display
   displayMode: 'badge',
   enabled: true,
+  // Enhanced analysis (disabled by default)
+  enableEnhancedAnalysis: false,
   // Site profiles
   siteProfiles: []
 };
@@ -205,11 +207,19 @@ export async function setExternalAPISettings(settings: Partial<ExternalAPISettin
 /**
  * Check if external API calls are allowed for a specific API
  */
-export async function canMakeExternalCall(apiName: keyof Omit<ExternalAPISettings, 'allowExternalCalls'>): Promise<boolean> {
+export async function canMakeExternalCall(apiName: keyof Omit<ExternalAPISettings, 'allowExternalCalls'> | 'botSentinel'): Promise<boolean> {
   const settings = await getExternalAPISettings();
 
   // Master switch must be on
   if (!settings.allowExternalCalls) return false;
+
+  // Handle botSentinel as a special case (nested under authorDatabase)
+  if (apiName === 'botSentinel') {
+    if (!settings.authorDatabase?.enabled) return false;
+    if (!settings.authorDatabase?.botSentinel?.enabled) return false;
+    if (!settings.authorDatabase?.botSentinel?.apiKey) return false;
+    return true;
+  }
 
   // Individual API must be enabled
   const apiSettings = settings[apiName];
