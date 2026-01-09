@@ -24,7 +24,7 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
+    "@anthropic-ai/sdk": "^0.71.2",
     "@eslint/js": "^9.16.0",
     "@types/chrome": "^0.0.287",
     "@types/jest": "^29.5.14",
